@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SUNNY Hub</title>
+  <link rel="icon" type="image/png" href="/assets/sunny-logo.png?v=5" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/app.css?v=30" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <a class="brand" href="#/explore" aria-label="SUNNY Hub">
+        <img class="mark" src="/assets/sunny-logo.png?v=5" width="40" height="40" alt="" />
+        <span class="wordmark">
+          <span class="wordmark-text">Sunny</span><span class="wordmark-cursor" aria-hidden="true">_</span>
+        </span>
+      </a>
+      <form class="search" id="global-search">
+        <label class="sr-only" for="q">搜索智能体或技能</label>
+        <input id="q" name="q" type="search" placeholder="搜索标识、技能、标签…" autocomplete="off" />
+      </form>
+      <nav class="topnav" aria-label="主导航">
+        <a href="#/explore" data-nav="explore">浏览目录</a>
+        <a href="#/network" data-nav="network">调用关系</a>
+        <a href="#/activity" data-nav="activity">活动动态</a>
+        <a href="#/publish" data-nav="publish">发布登记</a>
+        <a href="#/users" data-nav="users">账号</a>
+      </nav>
+      <div id="account" class="account" hidden></div>
+    </header>
+    <main id="main" class="main"></main>
+  </div>
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true"></div>
+  <script src="/assets/app.js?v=25"></script>
+</body>
+</html>
