@@ -1,0 +1,155 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from urllib.parse import urlparse
+
+import pytest
+from fastapi.testclient import TestClient
+
+from sunny_adapter.app import create_adapter_app
+from sunny_adapter.config import AdapterSettings
+from sunny_adapter.enroll import enroll
+from sunny_adapter.skills import query_strategy
+from sunny_client import SunnyClient, invoke_url
+from sunny_registry.app import create_app
+from sunny_registry.config import Settings
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class RoutedClient:
+    """Starlette TestClient wrapper that accepts absolute URLs."""
+
+    def __init__(self, registry: TestClient, adapter: TestClient = None) -> None:
+        self.registry = registry
+        self.adapter = adapter
+
+    def _go(self, method: str, url: str, **kwargs):
+        parsed = urlparse(url)
+        path = parsed.path
+        if parsed.query:
+            path = "{0}?{1}".format(path, parsed.query)
+        if path.startswith("/sunny/") and self.adapter is not None:
+            return getattr(self.adapter, method)(path, **kwargs)
+        return getattr(self.registry, method)(path, **kwargs)
+
+    def get(self, url, **kwargs):
+        return self._go("get", url, **kwargs)
+
+    def post(self, url, **kwargs):
+        return self._go("post", url, **kwargs)
+
+    def put(self, url, **kwargs):
+        return self._go("put", url, **kwargs)
+
+    def close(self):
+        self.registry.close()
+        if self.adapter is not None:
+            self.adapter.close()
+
+
+@pytest.fixture
+def pair(tmp_path):
+    settings = Settings()
+    settings.db_path = tmp_path / "reg.db"
+    settings.admin_token = "admin-test"
+    settings.enroll_token = "enroll-test"
+    settings.ticket_secret = "ticket-test"
+    settings.seed_on_empty = True
+    registry_tc = TestClient(create_app(settings))
+    registry_http = RoutedClient(registry_tc)
+
+    adapter_settings = AdapterSettings()
+    adapter_settings.registry_url = "http://registry"
+    adapter_settings.public_url = "http://adapter/sunny/v1"
+    adapter_settings.card_path = ROOT / "cards" / "aidata.hermes.sample.json"
+    adapter_settings.admin_token = "admin-test"
+    adapter_settings.enroll_token = "enroll-test"
+    adapter_settings.key_path = tmp_path / "aidata.key"
+    adapter_settings.agent_key = ""
+    adapter_settings.aidata_root = tmp_path / "no-aidata"
+
+    info = enroll(adapter_settings, registry_http)
+    adapter_settings.agent_key = info["agent_key"]
+    adapter_app = create_adapter_app(adapter_settings, registry_client=registry_http, auto_enroll=False)
+    adapter_tc = TestClient(adapter_app)
+    dual = RoutedClient(registry_tc, adapter_tc)
+
+    minted = dual.post(
+        "http://registry/api/v1/agents/lab.inspector/keys",
+        headers={"Authorization": "Bearer admin-test"},
+    )
+    assert minted.status_code == 200, minted.text
+    client = SunnyClient("http://registry", agent_key=minted.json()["agent_key"], client=dual)
+    yield {
+        "adapter": adapter_app,
+        "adapter_tc": adapter_tc,
+        "client": client,
+        "dual": dual,
+        "aidata_key": info["agent_key"],
+        "enroll": info,
+    }
+    dual.close()
+
+
+def test_strategy_catalog_living_room():
+    out = query_strategy({"mission_name": "living_room", "trace_id": "t1"})
+    assert out["ready"] is True
+    assert out["items"][0]["mission_name"] == "living_room"
+
+
+def test_search_then_invoke_strategy(pair):
+    client = pair["client"]
+    found = client.search(skill="collect.strategy.query")
+    assert found["count"] >= 1
+    assert found["items"][0]["agent_id"] == "aidata.hermes"
+    result = client.invoke("collect.strategy.query", {"mission_name": "laser", "trace_id": "m2-1"})
+    assert result["ready"] is True
+    assert result["items"][0]["mission_name"] == "laser"
+    assert result["_ticket"]["callee_id"] == "aidata.hermes"
+
+
+def test_invoke_rejects_missing_ticket(pair):
+    res = pair["adapter_tc"].post("/sunny/invoke/collect.strategy.query", json={"slots": {"mission_name": "pet"}})
+    assert res.status_code == 401
+
+
+def test_volume_without_proxy_is_ready_false(pair):
+    result = pair["client"].invoke(
+        "collect.volume.query",
+        {"mission_name": "living_room", "quest_name": "MetaData", "trace_id": "m2-vol"},
+    )
+    assert result["ready"] is False
+    assert result["mock"] is True
+    assert result["es_index"] == "ai_collect"
+    assert "dsl" not in result
+
+
+def test_admin_invoke_needs_caller(pair):
+    admin = SunnyClient("http://registry", admin_token="admin-test", client=pair["dual"])
+    result = admin.invoke(
+        "collect.strategy.query",
+        {"mission_name": "pet", "trace_id": "m2-admin"},
+        caller_id="lab.inspector",
+    )
+    assert result["ready"] is True
+    assert result["items"][0]["mission_name"] == "pet"
+
+
+def test_invoke_url_joins_card_path():
+    card = json.loads((ROOT / "cards" / "aidata.hermes.sample.json").read_text(encoding="utf-8"))
+    card["supportedInterfaces"][0]["url"] = "http://127.0.0.1:8091/sunny/v1"
+    assert invoke_url(card, "collect.volume.query") == "http://127.0.0.1:8091/sunny/invoke/collect.volume.query"
+
+
+def test_enroll_attach_keeps_hub_source(pair):
+    assert pair["enroll"]["mode"] == "attach"
+    detail = pair["dual"].get(
+        "http://registry/api/v1/agents/aidata.hermes",
+        headers={"Authorization": "Bearer admin-test"},
+    )
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body["enrollment_source"] == "hub"
+    assert body["lifecycle"] == "registered"
