@@ -56,12 +56,15 @@ def test_hub_control_taxonomy_and_colors():
     css = (WEB / "assets" / "app.css").read_text(encoding="utf-8")
     js = (WEB / "assets" / "app.js").read_text(encoding="utf-8")
 
-    for token in ("--hub:", "--self:", "--danger:", "--stale:", "--ok:", "--docker:", "--brand-green:", "--brand-silver:"):
+    for token in ("--hub:", "--self:", "--danger:", "--stale:", "--ok:", "--docker:", "--selected:", "--brand-green:", "--brand-silver:"):
         assert token in css
     for selector in (".btn {", ".btn-primary {", ".btn-danger {", ".btn-warning {", ".btn-success {", ".btn-ghost {", ".seg {", ".seg-item {", ".tabs .tab {", ".badge,", ".tag {"):
         assert selector in css
-    assert ".seg-item.active.source-hub" in css
-    assert ".seg-item.active.source-self" in css
+    assert ".seg-item.active {" in css
+    assert "background: var(--selected)" in css
+    assert ".seg-item.active.source-hub" not in css
+    assert ".seg-item.active.source-self" not in css
+    assert ".topnav a.active { background: var(--selected)" in css
 
     assert 'classes = ["btn", "btn-" + variant]' in js
     assert "function sourceSeg" in js
@@ -75,6 +78,11 @@ def test_hub_control_taxonomy_and_colors():
     assert "params.set(\"enrollment_source\", source)" in js
     assert "params.set(\"runtime_status\", status)" in js
     assert "params.set(\"q\", q)" in js
+    assert "function kindSeg" in js
+    assert "function activityHash" in js
+    assert "data-kind" in js
+    assert "id=\"trace-filter\"" in js
+    assert "按 trace_id 对账" in js
 
 
 def test_hub_nav_permissions_wired():

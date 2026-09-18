@@ -12,6 +12,7 @@ from sunny_adapter.config import AdapterSettings
 from sunny_adapter.enroll import enroll
 from sunny_adapter.skills import query_strategy
 from sunny_client import SunnyClient, invoke_url
+from sunny_client import hermes
 from sunny_registry.app import create_app
 from sunny_registry.config import Settings
 
@@ -115,6 +116,26 @@ def test_invoke_rejects_missing_ticket(pair):
     assert res.status_code == 401
 
 
+def test_invoke_rejects_unknown_slot(pair):
+    ticket = pair["client"].issue_ticket("aidata.hermes", "collect.strategy.query")
+    res = pair["adapter_tc"].post(
+        "/sunny/invoke/collect.strategy.query",
+        headers={"Authorization": "Bearer {0}".format(ticket["ticket"])},
+        json={"slots": {"mission_name": "living_room", "sql": "select 1"}},
+    )
+    assert res.status_code == 400
+    assert "sql" in res.json()["detail"]
+
+
+def test_health_reports_local_mapping(pair):
+    res = pair["adapter_tc"].get("/health")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["mapping"]["ok"] is True
+    assert "collect.strategy.query" in body["mapping"]["routes"]
+    assert body["downstream"]["configured"] is False
+
+
 def test_volume_without_proxy_is_ready_false(pair):
     result = pair["client"].invoke(
         "collect.volume.query",
@@ -153,3 +174,57 @@ def test_enroll_attach_keeps_hub_source(pair):
     body = detail.json()
     assert body["enrollment_source"] == "hub"
     assert body["lifecycle"] == "registered"
+
+
+def test_hermes_discover_and_peer_invoke(pair, monkeypatch):
+    monkeypatch.setenv("AIDATA_SUNNY", "1")
+    found = hermes.discover(skill="collect.strategy.query", client=pair["client"])
+    assert found["ready"] is True
+    assert found["items"][0]["agent_id"] == "aidata.hermes"
+    assert "card" not in found["items"][0]
+
+    self_hit = hermes.invoke_peer(
+        "collect.strategy.query",
+        {"mission_name": "laser"},
+        callee_id="aidata.hermes",
+        caller="aidata.hermes",
+        client=pair["client"],
+    )
+    assert self_hit["ready"] is False
+    assert "自己" in self_hit["meta"]["message"]
+
+    peer = hermes.invoke_peer(
+        "collect.strategy.query",
+        {"mission_name": "laser", "trace_id": "hermes-peer"},
+        callee_id="aidata.hermes",
+        caller="lab.inspector",
+        client=pair["client"],
+    )
+    assert peer["ready"] is True
+    assert peer["result"]["items"][0]["mission_name"] == "laser"
+    assert "ticket" not in peer["result"]
+    assert peer["result"]["_ticket"]["callee_id"] == "aidata.hermes"
+
+
+def test_client_search_workspace(pair):
+    found = pair["client"].search(workspace="ecovacs.aidata")
+    assert found["count"] >= 1
+    assert found["items"][0]["agent_id"] == "aidata.hermes"
+    empty = pair["client"].search(workspace="no.such.space")
+    assert empty["count"] == 0
+
+
+def test_hermes_discover_workspace_and_self_via_search(pair, monkeypatch):
+    monkeypatch.setenv("AIDATA_SUNNY", "1")
+    by_ws = hermes.discover(workspace="ecovacs.aidata", client=pair["client"])
+    assert by_ws["ready"] is True
+    assert by_ws["items"][0]["agent_id"] == "aidata.hermes"
+
+    self_via_search = hermes.invoke_peer(
+        "collect.strategy.query",
+        {"mission_name": "laser"},
+        caller="aidata.hermes",
+        client=pair["client"],
+    )
+    assert self_via_search["ready"] is False
+    assert "自己" in self_via_search["meta"]["message"]

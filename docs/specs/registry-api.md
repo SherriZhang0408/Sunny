@@ -37,12 +37,12 @@
 | POST | `/api/v1/agents/{id}/keys` | 管理员签发新 `sak_`（明文只回这一次） |
 | POST | `/api/v1/agents/{id}/heartbeat` | 心跳 |
 | GET | `/api/v1/agents/{id}/revisions` | 变更历史 |
-| GET | `/api/v1/search` | `skill` `tag` `workspace` `q`；只返回只读 skill |
-| POST | `/api/v1/tickets` | 签发短时票 |
-| POST | `/api/v1/tickets/verify` | 验票 |
+| GET | `/api/v1/search` | `skill` `tag` `workspace` `q`；只返回 `discovery=registered_peers` 且只读、`data_class` 为 public/internal 的 skill |
+| POST | `/api/v1/tickets` | 签发短时票。载荷含 `card_version`；对等不能调 private / approval_required / restricted / write |
+| POST | `/api/v1/tickets/verify` | 验票。Card `version` 变更后旧票作废 |
 | POST | `/api/v1/invocations` | 上报一次调用结果（画关系图） |
 | GET | `/api/v1/graph` | 节点 + 调用边 |
-| GET | `/api/v1/activity` | 全局时间线（管理员） |
+| GET | `/api/v1/activity` | 管理员时间线。`kind` `trace_id` `q`；搜索 / 出票 / 调用 / 名片 |
 
 Registry **不转发**业务调用。
 

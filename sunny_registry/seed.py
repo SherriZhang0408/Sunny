@@ -46,6 +46,7 @@ def seed_if_empty(store: Store) -> None:
         aidata["agent_id"],
         "collect.volume.query",
         store.settings.ticket_ttl_s,
+        card_version=aidata["version"],
     )
     store.record_ticket(issued["payload"])
     store.record_invocation(

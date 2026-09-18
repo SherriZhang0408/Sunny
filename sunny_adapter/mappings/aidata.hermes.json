@@ -1,0 +1,14 @@
+{
+  "agent_id": "aidata.hermes",
+  "card": "cards/aidata.hermes.sample.json",
+  "routes": [
+    {
+      "skill_id": "collect.strategy.query",
+      "handler": "local"
+    },
+    {
+      "skill_id": "collect.volume.query",
+      "handler": "local"
+    }
+  ]
+}

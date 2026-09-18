@@ -33,10 +33,10 @@ python3 scripts/validate_card.py cards/aidata.hermes.sample.json
 | 项 | 现状 |
 |----|------|
 | 首批租户 | `aidata.hermes`（Hub 填入 + sidecar 挂上）+ 演示对等 `lab.inspector` |
-| 对外技能 | `collect.strategy.query`（进程内枚举）、`collect.volume.query`（无 AIDATA 包装器则 `ready=false`） |
-| 发现 | 已登记 Agent 默认可互发现；调用另要短时票 |
+| 对外技能 | `collect.strategy.query`（进程内枚举）、`collect.volume.query`（无 AIDATA 包装器则 `ready=false`）。映射文件可把技能接到本地 handler 或下游 HTTP；invoke 按 Card `input_schema` 校验槽 |
+| 发现 | 已登记且 `discovery=registered_peers` 可互发现；`restricted` / 写技能不出目录；升版后旧票作废 |
 | 调用身份 | Agent 服务账号；不进个人 scratch |
-| 管理台 | 管理员/开发者登录；Explore / Card / 编辑 / 变更历史 / 调用关系 / Publish / 账号 |
+| 管理台 | 管理员/开发者登录；Explore / Card / 编辑 / 变更历史 / 调用关系 / 活动（搜索·出票·调用可按 trace_id 对账） / Publish / 账号 |
 | 权限 | 管理员全权限；开发者看名片、发布自己的智能体，且只能改/删自己创建的卡 |
 | 第二户 | ChatBI 意向保留；八字段表搁置 |
 

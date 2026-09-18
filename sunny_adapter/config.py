@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from sunny_registry.net import advertise_host
+from .mapping import default_mapping_path
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,3 +35,6 @@ class AdapterSettings:
         self.heartbeat_s = int(_env("SUNNY_ADAPTER_HEARTBEAT_S", "30"))
         self.aidata_root = Path(_env("AIDATA_ROOT", "/home/zhangshuang/PycharmProjects/AIDataAgent"))
         self.enrollment_source = _env("SUNNY_ADAPTER_ENROLLMENT", "self")
+        mapping_default = default_mapping_path(ROOT, self.agent_id)
+        mapping_raw = _env("SUNNY_ADAPTER_MAPPING", str(mapping_default) if mapping_default.is_file() else "")
+        self.mapping_path = Path(mapping_raw) if mapping_raw else None

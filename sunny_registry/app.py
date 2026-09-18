@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from .config import Settings, get_settings
 from .db import connect
-from . import security
+from . import observe, policy, security
 from .join import build_join_payload, join_markdown_for
 from .security import (
     Principal,
@@ -236,6 +236,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             workspace=workspace,
             enrollment_source=enrollment_source,
             runtime_status=runtime_status,
+            peer_visible_only=not principal.is_admin,
+            include_owned_by=principal.user_id if principal.is_hub_user else None,
+            include_agent_id=principal.agent_id if principal.is_agent else None,
         )
         items = [_with_access(principal, item) for item in items]
         return {"items": items, "count": len(items)}
@@ -244,7 +247,13 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     def get_agent(agent_id: str, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
         require_viewer(principal)
         detail = app.state.store.get_detail(agent_id)
-        if not principal.is_admin and detail["lifecycle"] != "registered":
+        if not policy.can_view_agent(
+            is_admin=principal.is_admin,
+            is_owner=bool(principal.is_hub_user and principal.user_id and principal.user_id == detail.get("created_by")),
+            is_self=bool(principal.is_agent and principal.agent_id == agent_id),
+            lifecycle=detail["lifecycle"],
+            discovery=detail.get("discovery"),
+        ):
             raise HTTPException(status_code=404, detail="agent not found")
         return _with_access(principal, detail)
 
@@ -322,6 +331,16 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     ) -> Dict[str, Any]:
         require_viewer(principal)
         items = [_with_access(principal, item) for item in app.state.store.search(skill_id=skill, tag=tag, workspace=workspace, q=q)]
+        hits = [item["agent_id"] for item in items]
+        caller_id = principal.agent_id if principal.is_agent else None
+        app.state.store.record_event(
+            "search",
+            principal.actor,
+            caller_id=caller_id,
+            skill_id=skill,
+            summary="search hits={0}".format(len(hits)),
+            detail=observe.search_detail(skill, tag, workspace, q, hits, len(hits)),
+        )
         return {"items": items, "count": len(items)}
 
     @app.post("/api/v1/tickets")
@@ -336,18 +355,51 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             raise HTTPException(status_code=403, detail="caller must be the authenticated agent")
         callee = app.state.store.get_detail(body.callee_id)
         if callee["lifecycle"] != "registered":
+            app.state.store.record_event(
+                "ticket",
+                principal.actor,
+                status="denied",
+                caller_id=caller,
+                callee_id=body.callee_id,
+                skill_id=body.skill_id,
+                summary="ticket denied: callee not registered",
+                detail={"reason": "callee is not registered"},
+            )
             raise HTTPException(status_code=409, detail="callee is not registered")
         skill = app.state.store.skill_on_agent(body.callee_id, body.skill_id)
         if not skill:
+            app.state.store.record_event(
+                "ticket",
+                principal.actor,
+                status="denied",
+                caller_id=caller,
+                callee_id=body.callee_id,
+                skill_id=body.skill_id,
+                summary="ticket denied: skill not on card",
+                detail={"reason": "skill not on callee card"},
+            )
             raise HTTPException(status_code=404, detail="skill not on callee card")
-        if skill["side_effects"] in {"write", "execute_sql"} and not principal.is_admin:
-            raise HTTPException(status_code=403, detail="write/execute_sql skills are not callable by peers")
+        if not principal.is_admin:
+            denied = policy.peer_ticket_denied(skill, callee.get("discovery"))
+            if denied:
+                app.state.store.record_event(
+                    "ticket",
+                    principal.actor,
+                    status="denied",
+                    caller_id=caller,
+                    callee_id=body.callee_id,
+                    skill_id=body.skill_id,
+                    summary="ticket denied: {0}".format(denied),
+                    detail={"reason": denied},
+                )
+                raise HTTPException(status_code=403, detail=denied)
         issued = security.issue_ticket(
             settings.ticket_secret,
             caller,
             body.callee_id,
             body.skill_id,
             settings.ticket_ttl_s,
+            card_version=callee.get("version"),
         )
         app.state.store.record_ticket(issued["payload"])
         return {
@@ -356,6 +408,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             "caller_id": caller,
             "callee_id": body.callee_id,
             "skill_id": body.skill_id,
+            "card_version": callee.get("version"),
             "jti": issued["jti"],
         }
 
@@ -369,6 +422,11 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             raise HTTPException(status_code=403, detail="ticket skill mismatch")
         if principal.is_agent and principal.agent_id not in {payload["caller"], payload["callee"]}:
             raise HTTPException(status_code=403, detail="ticket not for this agent")
+        callee = app.state.store.get_row(payload["callee"])
+        if not callee or callee["lifecycle"] != "registered":
+            raise HTTPException(status_code=409, detail="callee is not registered")
+        if policy.ticket_version_stale(payload.get("card_version"), callee["version"]):
+            raise HTTPException(status_code=401, detail="ticket stale: card version changed")
         return {"ok": True, "payload": payload}
 
     @app.post("/api/v1/invocations")
@@ -395,9 +453,21 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         return app.state.store.graph()
 
     @app.get("/api/v1/activity")
-    def activity(principal: Principal = Depends(get_principal), limit: int = 80) -> Dict[str, Any]:
+    def activity(
+        principal: Principal = Depends(get_principal),
+        limit: int = 80,
+        kind: Optional[str] = Query(default=None),
+        trace_id: Optional[str] = Query(default=None),
+        q: Optional[str] = Query(default=None),
+    ) -> Dict[str, Any]:
         require_admin(principal)
-        return {"items": app.state.store.activity(limit=min(limit, 200))}
+        items = app.state.store.activity(
+            limit=min(limit, 200),
+            kind=kind or None,
+            trace_id=trace_id or None,
+            q=q or None,
+        )
+        return {"items": items, "count": len(items)}
 
     if WEB_DIR.is_dir():
         app.mount("/assets", StaticFiles(directory=str(WEB_DIR / "assets")), name="assets")

@@ -99,7 +99,14 @@ def _unsign_payload(secret: str, token: str) -> Dict[str, Any]:
     return json.loads(body.decode("utf-8"))
 
 
-def issue_ticket(secret: str, caller: str, callee: str, skill_id: str, ttl_s: int) -> Dict[str, Any]:
+def issue_ticket(
+    secret: str,
+    caller: str,
+    callee: str,
+    skill_id: str,
+    ttl_s: int,
+    card_version: Optional[str] = None,
+) -> Dict[str, Any]:
     now = int(time.time())
     payload = {
         "iss": "sunny-registry",
@@ -110,6 +117,8 @@ def issue_ticket(secret: str, caller: str, callee: str, skill_id: str, ttl_s: in
         "exp": now + ttl_s,
         "jti": secrets.token_hex(8),
     }
+    if card_version:
+        payload["card_version"] = card_version
     token = _sign_payload(secret, payload)
     return {"ticket": token, "expires_at": payload["exp"], "jti": payload["jti"], "payload": payload}
 

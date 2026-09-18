@@ -8,7 +8,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from . import security
+from . import observe, policy, security
 from .card_validate import extract_agent_id, validate_card
 from .config import Settings
 
@@ -222,6 +222,7 @@ class Store:
     def _row_to_summary(self, row: sqlite3.Row) -> Dict[str, Any]:
         card = json.loads(row["card_json"])
         skills = self._skills_from_card(card)
+        stored_discovery = row["discovery"] if "discovery" in row.keys() else None
         return {
             "agent_id": row["agent_id"],
             "name": row["name"],
@@ -230,6 +231,7 @@ class Store:
             "workspace": row["workspace"],
             "enrollment_source": row["enrollment_source"],
             "lifecycle": row["lifecycle"],
+            "discovery": policy.discovery_of(card, stored_discovery),
             "runtime_status": self.runtime_status(row),
             "access_tier": (card.get("x-sunny") or {}).get("access_tier"),
             "skill_count": len(skills),
@@ -265,8 +267,8 @@ class Store:
             INSERT INTO agents(
                 agent_id, workspace, name, description, version, card_json,
                 enrollment_source, lifecycle, last_heartbeat_at, agent_key_hash,
-                created_by, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+                created_by, discovery, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
             """,
             (
                 agent_id,
@@ -279,6 +281,7 @@ class Store:
                 lifecycle,
                 security.hash_agent_key(raw_key, self.settings.ticket_secret),
                 created_by,
+                policy.discovery_of(prepared),
                 now,
                 now,
             ),
@@ -313,7 +316,7 @@ class Store:
         now = utcnow()
         self.conn.execute(
             """
-            UPDATE agents SET workspace=?, name=?, description=?, version=?, card_json=?, updated_at=?
+            UPDATE agents SET workspace=?, name=?, description=?, version=?, card_json=?, discovery=?, updated_at=?
             WHERE agent_id=?
             """,
             (
@@ -322,6 +325,7 @@ class Store:
                 prepared["description"],
                 prepared["version"],
                 json.dumps(prepared, ensure_ascii=False),
+                policy.discovery_of(prepared),
                 now,
                 agent_id,
             ),
@@ -455,6 +459,9 @@ class Store:
         workspace: Optional[str] = None,
         enrollment_source: Optional[str] = None,
         runtime_status: Optional[str] = None,
+        peer_visible_only: bool = False,
+        include_owned_by: Optional[str] = None,
+        include_agent_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         sql = "SELECT * FROM agents"
         clauses = []
@@ -473,6 +480,15 @@ class Store:
             like = "%{0}%".format(q)
             clauses.append("(agent_id LIKE ? OR name LIKE ? OR description LIKE ?)")
             args.extend([like, like, like])
+        if peer_visible_only:
+            visible = ["COALESCE(discovery, 'registered_peers') = 'registered_peers'"]
+            if include_owned_by:
+                visible.append("created_by = ?")
+                args.append(include_owned_by)
+            if include_agent_id:
+                visible.append("agent_id = ?")
+                args.append(include_agent_id)
+            clauses.append("(" + " OR ".join(visible) + ")")
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY updated_at DESC"
@@ -495,7 +511,9 @@ class Store:
             SELECT DISTINCT a.* FROM agents a
             JOIN agent_skills s ON s.agent_id = a.agent_id
             WHERE a.lifecycle = 'registered'
+              AND COALESCE(a.discovery, 'registered_peers') = 'registered_peers'
               AND s.side_effects = 'read'
+              AND s.data_class IN ('public', 'internal')
         """
         args: List[Any] = []
         if skill_id:
@@ -542,25 +560,176 @@ class Store:
             "card": json.loads(row["card_json"]),
         }
 
-    def activity(self, limit: int = 80) -> List[Dict[str, Any]]:
-        rows = self.conn.execute(
+    def record_event(
+        self,
+        kind: str,
+        actor: str,
+        *,
+        status: str = "ok",
+        caller_id: Optional[str] = None,
+        callee_id: Optional[str] = None,
+        skill_id: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        ticket_jti: Optional[str] = None,
+        summary: str = "",
+        detail: Optional[Dict[str, Any]] = None,
+        commit: bool = True,
+    ) -> Dict[str, Any]:
+        if kind not in observe.KINDS:
+            raise StoreError(400, "unknown observe kind")
+        if status not in observe.EVENT_STATUSES:
+            raise StoreError(400, "unknown observe status")
+        now = utcnow()
+        cur = self.conn.execute(
             """
-            SELECT agent_id, rev, action, actor, enrollment_source, summary, created_at
-            FROM revisions ORDER BY id DESC LIMIT ?
+            INSERT INTO observe_events(
+                kind, status, actor, caller_id, callee_id, skill_id, trace_id,
+                ticket_jti, summary, detail_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (limit,),
-        ).fetchall()
-        return [dict(row) for row in rows]
+            (
+                kind,
+                status,
+                actor,
+                caller_id,
+                callee_id,
+                skill_id,
+                observe.clip(trace_id, 80),
+                ticket_jti,
+                observe.clip(summary, 240) or kind,
+                json.dumps(detail or {}, ensure_ascii=False),
+                now,
+            ),
+        )
+        if commit:
+            self.conn.commit()
+        return observe.shape_event(
+            event_id="obs:{0}".format(cur.lastrowid),
+            kind=kind,
+            status=status,
+            actor=actor,
+            created_at=now,
+            caller_id=caller_id,
+            callee_id=callee_id,
+            skill_id=skill_id,
+            trace_id=trace_id,
+            ticket_jti=ticket_jti,
+            summary=summary,
+            detail=detail or {},
+        )
+
+    def activity(
+        self,
+        limit: int = 80,
+        kind: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        q: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        if kind and kind not in observe.KINDS:
+            raise StoreError(400, "kind must be search, ticket, invoke, or card")
+        items: List[Dict[str, Any]] = []
+        if kind != "card":
+            sql = "SELECT * FROM observe_events"
+            clauses = []
+            args: List[Any] = []
+            if kind:
+                clauses.append("kind = ?")
+                args.append(kind)
+            if trace_id:
+                clauses.append("trace_id = ?")
+                args.append(trace_id)
+            if q:
+                like = "%{0}%".format(q)
+                clauses.append(
+                    "(actor LIKE ? OR caller_id LIKE ? OR callee_id LIKE ? OR skill_id LIKE ? OR summary LIKE ? OR ticket_jti LIKE ? OR trace_id LIKE ?)"
+                )
+                args.extend([like, like, like, like, like, like, like])
+            if clauses:
+                sql += " WHERE " + " AND ".join(clauses)
+            sql += " ORDER BY id DESC LIMIT ?"
+            args.append(limit)
+            for row in self.conn.execute(sql, args):
+                detail = {}
+                if row["detail_json"]:
+                    try:
+                        detail = json.loads(row["detail_json"])
+                    except Exception:
+                        detail = {}
+                items.append(
+                    observe.shape_event(
+                        event_id="obs:{0}".format(row["id"]),
+                        kind=row["kind"],
+                        status=row["status"],
+                        actor=row["actor"],
+                        created_at=row["created_at"],
+                        caller_id=row["caller_id"],
+                        callee_id=row["callee_id"],
+                        skill_id=row["skill_id"],
+                        trace_id=row["trace_id"],
+                        ticket_jti=row["ticket_jti"],
+                        summary=row["summary"],
+                        detail=detail,
+                    )
+                )
+        if kind in {None, "card"} and not trace_id:
+            rev_sql = """
+                SELECT id, agent_id, rev, action, actor, enrollment_source, summary, created_at
+                FROM revisions
+            """
+            rev_args: List[Any] = []
+            if q:
+                rev_sql += " WHERE agent_id LIKE ? OR actor LIKE ? OR summary LIKE ? OR action LIKE ?"
+                like = "%{0}%".format(q)
+                rev_args.extend([like, like, like, like])
+            rev_sql += " ORDER BY id DESC LIMIT ?"
+            rev_args.append(limit)
+            for row in self.conn.execute(rev_sql, rev_args):
+                items.append(
+                    observe.shape_event(
+                        event_id="rev:{0}".format(row["id"]),
+                        kind="card",
+                        status="ok",
+                        actor=row["actor"],
+                        created_at=row["created_at"],
+                        callee_id=row["agent_id"],
+                        agent_id=row["agent_id"],
+                        action=row["action"],
+                        summary=row["summary"],
+                        detail={"rev": row["rev"], "enrollment_source": row["enrollment_source"]},
+                    )
+                )
+        items.sort(key=lambda item: item["created_at"], reverse=True)
+        return items[:limit]
 
     def record_ticket(self, payload: dict) -> None:
         issued = datetime.fromtimestamp(int(payload["iat"]), tz=timezone.utc).strftime(ISO)
         expires = datetime.fromtimestamp(int(payload["exp"]), tz=timezone.utc).strftime(ISO)
         self.conn.execute(
             """
-            INSERT OR REPLACE INTO tickets(jti, caller_id, callee_id, skill_id, issued_at, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO tickets(jti, caller_id, callee_id, skill_id, card_version, issued_at, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (payload["jti"], payload["caller"], payload["callee"], payload["skill"], issued, expires),
+            (
+                payload["jti"],
+                payload["caller"],
+                payload["callee"],
+                payload["skill"],
+                payload.get("card_version") or "",
+                issued,
+                expires,
+            ),
+        )
+        self.record_event(
+            "ticket",
+            "agent:{0}".format(payload["caller"]),
+            status="issued",
+            caller_id=payload["caller"],
+            callee_id=payload["callee"],
+            skill_id=payload["skill"],
+            ticket_jti=payload["jti"],
+            summary="{0} -> {1} #{2} issued".format(payload["caller"], payload["callee"], payload["skill"]),
+            detail={"card_version": payload.get("card_version") or ""},
+            commit=False,
         )
         self.conn.commit()
 
@@ -593,6 +762,18 @@ class Store:
             None,
             None,
             "{0} -> {1} #{2} {3}".format(caller_id, callee_id, skill_id, status),
+        )
+        self.record_event(
+            "invoke",
+            actor,
+            status=status if status in observe.EVENT_STATUSES else "ok",
+            caller_id=caller_id,
+            callee_id=callee_id,
+            skill_id=skill_id,
+            trace_id=trace_id,
+            ticket_jti=ticket_jti,
+            summary="{0} -> {1} #{2} {3}".format(caller_id, callee_id, skill_id, status),
+            commit=False,
         )
         self.conn.commit()
         return {

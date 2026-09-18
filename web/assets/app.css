@@ -1,6 +1,7 @@
 /* 控件：.btn 动作 · .seg 筛选 · .tab 分页 · .badge/.tag 状态
    动作色：primary 推进 · danger 销毁 · warning 停用 · success 恢复 · ghost 次要
-   来源色：hub / self 徽章与来源筛选共用 */
+   选中/当前项：--selected（Docker 蓝，与主操作一致）
+   来源色：hub / self 只用于徽章，不用于选中高亮 */
 :root {
   --text-primary: #1a1a1a;
   --text-secondary: #666;
@@ -15,6 +16,7 @@
   --brand-green: #00ff41;
   --docker: #2496ed;
   --docker-deep: #1a6fb3;
+  --selected: var(--docker);
   --hub: #1d63ed;
   --self: #0e8a74;
   --ok: #1a7f4b;
@@ -147,7 +149,7 @@ code, .mono { font-family: var(--font-mono); }
   text-decoration: none;
 }
 .topnav a:hover { color: #fff; text-decoration: none; background: rgba(255,255,255,0.08); }
-.topnav a.active { background: var(--docker); color: #fff; }
+.topnav a.active { background: var(--selected); color: #fff; }
 .topnav a[hidden] { display: none; }
 
 .account {
@@ -191,6 +193,16 @@ textarea.short { min-height: 88px; }
 .hero { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 22px; }
 .hero p { margin: 0; color: var(--text-secondary); max-width: 640px; font-size: var(--fs-sub); line-height: 1.5; }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters form { display: flex; align-items: center; gap: 8px; }
+.filters input[type="search"] {
+  width: 220px;
+  height: var(--control-h);
+  border: 1px solid var(--line);
+  border-radius: var(--control-radius);
+  padding: 0 12px;
+  background: #fff;
+  font: inherit;
+}
 .seg {
   display: inline-flex;
   align-items: center;
@@ -217,11 +229,9 @@ textarea.short { min-height: 88px; }
 }
 .seg-item:hover { color: var(--text-primary); }
 .seg-item.active {
-  background: var(--navy);
+  background: var(--selected);
   color: #fff;
 }
-.seg-item.active.source-hub { background: var(--hub); }
-.seg-item.active.source-self { background: var(--self); }
 .seg-item:focus-visible {
   outline: 2px solid var(--docker);
   outline-offset: 1px;
@@ -291,7 +301,7 @@ textarea.short { min-height: 88px; }
   margin-bottom: -1px;
 }
 .tabs .tab:hover { color: var(--text-primary); }
-.tabs .tab.active { color: var(--text-primary); border-bottom-color: var(--docker); }
+.tabs .tab.active { color: var(--text-primary); border-bottom-color: var(--selected); }
 .tabs .tab:focus-visible {
   outline: 2px solid var(--docker);
   outline-offset: 2px;

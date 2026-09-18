@@ -162,6 +162,9 @@
     issue_key: "签发密钥",
     invoke: "调用上报",
     invocation: "调用上报",
+    search: "搜索",
+    ticket: "出票",
+    issued: "出票",
     delete: "删除",
     patch: "更新",
   };
@@ -769,16 +772,86 @@
       '<path d="M 0 0 L 10 5 L 0 10 z" fill="#2496ed" /></marker></defs>' + lines + dots + "</svg>";
   }
 
-  async function activityView() {
-    const data = await api("/api/v1/activity");
-    const items = data.items.map(function (rev) {
-      return "<li>" + datetimeHtml(rev.created_at) + "<div><strong>" +
-        escapeHtml(rev.agent_id) + "</strong> · " + escapeHtml(actionLabel(rev.action)) + " · " +
-        escapeHtml(rev.actor) + "<div>" + escapeHtml(summaryLabel(rev.summary)) + "</div></div></li>";
+  function kindSeg(kind) {
+    return (
+      '<div class="seg" role="group" aria-label="按事件类型筛选">' +
+      [
+        ["", "全部"],
+        ["search", "搜索"],
+        ["ticket", "出票"],
+        ["invoke", "调用"],
+        ["card", "名片"],
+      ].map(function (pair) {
+        const selected = kind === pair[0];
+        return (
+          '<button type="button" class="seg-item' + (selected ? " active" : "") +
+          '" data-kind="' + pair[0] + '" aria-pressed="' + (selected ? "true" : "false") + '">' +
+          pair[1] + "</button>"
+        );
+      }).join("") +
+      "</div>"
+    );
+  }
+
+  function kindBadge(kind, status) {
+    if (kind === "search") return badge("hub", "搜索");
+    if (kind === "ticket") return badge(status === "denied" ? "danger" : "ok", status === "denied" ? "出票拒绝" : "出票");
+    if (kind === "invoke") return badge(status === "ok" ? "ok" : "danger", status === "ok" ? "调用成功" : "调用" + (INVOKE_STATUS[status] || status));
+    return badge("", actionLabel(kind));
+  }
+
+  function activityHash(kind, traceId, q) {
+    const params = new URLSearchParams();
+    if (kind) params.set("kind", kind);
+    if (traceId) params.set("trace_id", traceId);
+    if (q) params.set("q", q);
+    const qs = params.toString();
+    return "#/activity" + (qs ? "?" + qs : "");
+  }
+
+  async function activityView(query) {
+    query = query || new URLSearchParams();
+    const kind = query.get("kind") || "";
+    const traceId = query.get("trace_id") || "";
+    const q = query.get("q") || "";
+    const params = new URLSearchParams();
+    if (kind) params.set("kind", kind);
+    if (traceId) params.set("trace_id", traceId);
+    if (q) params.set("q", q);
+    const data = await api("/api/v1/activity?" + params.toString());
+    const items = (data.items || []).map(function (ev) {
+      const trace = ev.trace_id
+        ? '<a class="mono" href="' + activityHash(kind, ev.trace_id, q) + '">' + escapeHtml(ev.trace_id) + "</a>"
+        : "";
+      const pair = (ev.caller_id || ev.callee_id)
+        ? '<span class="mono">' + escapeHtml(ev.caller_id || "—") + " → " + escapeHtml(ev.callee_id || ev.agent_id || "—") + "</span>"
+        : '<span class="mono">' + escapeHtml(ev.agent_id || "") + "</span>";
+      return "<li>" + datetimeHtml(ev.created_at) + "<div>" + kindBadge(ev.kind, ev.status) + " " +
+        pair + (ev.skill_id ? " · <span class=\"mono\">" + escapeHtml(ev.skill_id) + "</span>" : "") +
+        (trace ? " · " + trace : "") +
+        "<div>" + escapeHtml(summaryLabel(ev.summary)) + " · " + escapeHtml(ev.actor) + "</div></div></li>";
     }).join("");
     main.innerHTML =
-      '<div class="hero"><div><h1>动态</h1><p>登记、改卡、心跳、停用、调用上报的时间线。</p></div></div>' +
+      '<div class="hero"><div><h1>动态</h1><p>搜索、出票、调用与名片变更在同一条时间线。点 <code>trace_id</code> 可对账。</p></div>' +
+        '<div class="filters">' + kindSeg(kind) +
+          '<form id="trace-filter">' +
+            '<label class="sr-only" for="trace-id">按 trace_id 过滤</label>' +
+            '<input id="trace-id" name="trace_id" type="search" placeholder="按 trace_id 对账…" value="' + escapeHtml(traceId) + '" />' +
+            controlBtn("查看", { variant: "primary", type: "submit" }) +
+          "</form></div></div>" +
       '<div class="panel">' + (items ? "<ul class=\"timeline\">" + items + "</ul>" : '<div class="empty">暂无活动。</div>') + "</div>";
+    document.querySelectorAll("[data-kind]").forEach(function (btn) {
+      btn.onclick = function () {
+        location.hash = activityHash(btn.getAttribute("data-kind") || "", traceId, q);
+      };
+    });
+    const form = document.getElementById("trace-filter");
+    if (form) {
+      form.onsubmit = function (ev) {
+        ev.preventDefault();
+        location.hash = activityHash(kind, document.getElementById("trace-id").value.trim(), q);
+      };
+    }
   }
 
   function downloadText(filename, text, type) {
@@ -1022,7 +1095,7 @@
       }
       if (r.parts[0] === "activity") {
         if (!can("view_activity")) return denyView("开发者不能查看全局活动动态。");
-        return await activityView();
+        return await activityView(r.query);
       }
       if (r.parts[0] === "publish") return await publishView();
       if (r.parts[0] === "users") {

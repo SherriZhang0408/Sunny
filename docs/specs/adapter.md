@@ -30,6 +30,7 @@ sunny-client（另一进程）
 | `SUNNY_ADAPTER_KEY_FILE` | `data/adapter-keys/<agent_id>.key` | sidecar 自己的 `sak_` |
 | `SUNNY_ADMIN_TOKEN` / `SUNNY_ENROLL_TOKEN` | `sunny-dev-*` | 409 后签发 key / 首次自注册 |
 | `AIDATA_ROOT` | `~/PycharmProjects/AIDataAgent` | 有 `es_query_ai_collect.py` 才真 count |
+| `SUNNY_ADAPTER_MAPPING` | `sunny_adapter/mappings/<agent_id>.json` | 技能路由：`local` 或 HTTP。缺省文件存在则自动加载 |
 
 Hub 已登记同一 `agent_id` 时，sidecar **只挂接口、不改 enrollment_source**（仍是 `hub`）。
 
@@ -50,6 +51,32 @@ Sidecar 启动时会：
 
 钥匙写在 `data/adapter-keys/<agent_id>.key`，不进 Card、不进 Git。
 
+## 映射与槽校验（P1）
+
+验票之后、执行之前，按 Card 里该技能的 `x-sunny.input_schema` 校验 `slots`。多出来的键（例如 `sql`）或缺少 `anyOf` 必填 → `400`。
+
+`aidata.hermes` 默认映射把两技能标成 `handler: local`，行为与 M2 相同。下一个租户只交 Card + 映射，不必再写 Python handler：
+
+```json
+{
+  "agent_id": "lab.echo",
+  "routes": [
+    {
+      "skill_id": "echo.ping",
+      "handler": "http",
+      "method": "POST",
+      "url": "${ECHO_URL}/v1/echo",
+      "map": { "q": "$.slots.query" }
+    }
+  ],
+  "heartbeat": { "url": "${ECHO_URL}/health" }
+}
+```
+
+`url` / `headers` 支持 `${VAR}` 与 `${VAR:-default}`。URL 必须是 http(s)，且来自映射文件，不接受 slots 里的地址。下游失败回 `ready=false`，不把密钥写进错误。`/health` 带 `mapping.routes`；若配置了 `heartbeat.url` 再探下游，**不挡** Registry 心跳。
+
+也接受 `.yaml`（需本机已装 PyYAML）。无映射文件时仍走内置 `dispatch`（仅 Hermes 两技能）。
+
 ## 另一进程调用
 
 ```bash
@@ -57,6 +84,8 @@ python3 -m sunny_client --skill collect.strategy.query --slots '{"mission_name":
 ```
 
 环境变量：`SUNNY_REGISTRY_URL`、`SUNNY_AGENT_KEY`（调用方）、`SUNNY_ADMIN_TOKEN`（本地可代签票）、`SUNNY_CALLER_ID`（管理员代签时的 caller，默认 `lab.inspector`）。
+
+Hermes Chat 不要直接跑这一条。对话里用可选 Skill `sunny.discover` / `sunny.invoke`（默认关，见 [hermes-skills.md](./hermes-skills.md)），避免图像/闭环被改道。
 
 ## 余量查询
 

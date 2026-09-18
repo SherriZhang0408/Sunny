@@ -53,7 +53,7 @@
 - 真实内网主机名（样例只用 `*.internal.example`）
 - `side_effects` 为 `write` 或 `execute_sql` 却把 `data_class` 标成 `public`
 
-接入规则（将来校验器，现在脚本已做）：缺 skill、缺接口、含密钥 → 拒绝。
+接入规则：校验器拒缺 skill / 缺接口 / 含密钥；运行时门闩见 [`policy.md`](./policy.md)。升 `version` 后旧调用票作废（ADR-002）。
 
 ---
 
@@ -65,7 +65,7 @@
 |------|------|------|
 | `agent_id` | `aidata.hermes` | 稳定主键，点号分段 |
 | `workspace` | 非空字符串 | 服务工作区标签；P0 不分三级（ADR-002） |
-| `discovery` | `registered_peers` / `private` / `approval_required` | 默认 `registered_peers`（ADR-001 §3） |
+| `discovery` | `registered_peers` / `private` / `approval_required` | 默认 `registered_peers`（ADR-001 §3）。`private` / `approval_required` 不对对等搜索、列表和出票 |
 | `access_tier` | `S0` / `S1` / `S2` | 纯登记 / sidecar / 原生 A2A |
 | `lifecycle` | `draft` / `registered` / `disabled` | 样例内容已评审，尚未挂进 Registry |
 | `not_exposed` | 字符串数组 | 内部有、对外禁挂的 skill 或能力 |
@@ -79,8 +79,8 @@
 
 | 字段 | 取值 | 说明 |
 |------|------|------|
-| `data_class` | `public` / `internal` / `restricted` | 公开目录 / 已登记对等 / 需 Extended Card |
-| `side_effects` | `read` / `write` / `execute_sql` | `write` / `execute_sql` 默认不进跨 Agent 搜索，除非策略白名单 |
+| `data_class` | `public` / `internal` / `restricted` | 公开目录 / 已登记对等 / 需 Extended Card。`restricted` 不进搜索，对等不能出票 |
+| `side_effects` | `read` / `write` / `execute_sql` | `write` / `execute_sql` 默认不进跨 Agent 搜索，对等不能出票 |
 | `source_asset` / `source_skill` | 现网 ID | 从哪张资产卡收窄而来 |
 | `invoke.method` / `invoke.path` | HTTP | sidecar 对外路径，不是业务真源 URL |
 | `input_schema` / `output_schema` | JSON Schema | 调用方填槽、校验回包 |

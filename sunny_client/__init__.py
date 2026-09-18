@@ -51,7 +51,13 @@ class SunnyClient:
             headers["X-Sunny-Agent-Key"] = self.agent_key
         return headers
 
-    def search(self, skill: Optional[str] = None, tag: Optional[str] = None, q: Optional[str] = None) -> Dict[str, Any]:
+    def search(
+        self,
+        skill: Optional[str] = None,
+        tag: Optional[str] = None,
+        q: Optional[str] = None,
+        workspace: Optional[str] = None,
+    ) -> Dict[str, Any]:
         params = {}
         if skill:
             params["skill"] = skill
@@ -59,6 +65,8 @@ class SunnyClient:
             params["tag"] = tag
         if q:
             params["q"] = q
+        if workspace:
+            params["workspace"] = workspace
         res = self.http.get("{0}/api/v1/search".format(self.registry_url), headers=self._headers(), params=params)
         res.raise_for_status()
         return res.json()

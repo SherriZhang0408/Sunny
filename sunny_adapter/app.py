@@ -12,7 +12,10 @@ from pydantic import BaseModel
 
 from .config import AdapterSettings
 from .enroll import enroll, load_card
-from .skills import dispatch
+from .invoke import invoke_skill
+from .mapping import MappingError, load_mapping
+from .proxy import probe_downstream
+from .slots import SlotError
 
 
 class InvokeBody(BaseModel):
@@ -39,11 +42,14 @@ def _verify_ticket(settings: AdapterSettings, client: httpx.Client, token: str, 
 def create_adapter_app(
     settings: Optional[AdapterSettings] = None,
     registry_client: Optional[httpx.Client] = None,
+    upstream_client: Optional[httpx.Client] = None,
     auto_enroll: bool = False,
 ) -> FastAPI:
     settings = settings or AdapterSettings()
     owns = registry_client is None
     client = registry_client or httpx.Client(timeout=15.0)
+    owns_upstream = upstream_client is None
+    upstream = upstream_client or httpx.Client(timeout=15.0)
     stop = threading.Event()
 
     def beat() -> None:
@@ -75,19 +81,39 @@ def create_adapter_app(
             timer.cancel()
         if owns:
             client.close()
+        if owns_upstream:
+            upstream.close()
 
     app = FastAPI(title="SUNNY Adapter", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.registry = client
+    app.state.upstream = upstream
 
     @app.get("/health")
     def health() -> Dict[str, Any]:
-        return {
+        payload = {
             "ok": True,
             "service": "sunny-adapter",
             "agent_id": settings.agent_id,
             "enrolled": bool(settings.agent_key),
+            "mapping": None,
+            "downstream": {"configured": False},
         }
+        if settings.mapping_path and settings.mapping_path.is_file():
+            try:
+                mapping = load_mapping(settings.mapping_path, settings.agent_id)
+            except MappingError as exc:
+                payload["mapping"] = {"ok": False, "error": str(exc)}
+                return payload
+            payload["mapping"] = {
+                "ok": True,
+                "path": str(settings.mapping_path),
+                "routes": [route["skill_id"] for route in mapping.get("routes") or []],
+            }
+            hb = (mapping.get("heartbeat") or {}).get("url")
+            if hb:
+                payload["downstream"] = probe_downstream(hb, upstream)
+        return payload
 
     @app.get("/sunny/v1/card")
     def public_card() -> Dict[str, Any]:
@@ -109,9 +135,13 @@ def create_adapter_app(
         if body.trace_id and not slots.get("trace_id"):
             slots["trace_id"] = body.trace_id
         try:
-            return dispatch(skill_id, slots, settings)
+            return invoke_skill(skill_id, slots, settings, upstream=upstream)
         except KeyError:
             raise HTTPException(status_code=404, detail="skill not hosted: {0}".format(skill_id))
+        except SlotError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except MappingError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 
