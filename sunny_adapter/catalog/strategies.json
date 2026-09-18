@@ -1,0 +1,83 @@
+[
+  {
+    "mission_name": "laser",
+    "title": "地毯 / 污渍图像",
+    "description": "地毯 / 污渍图像",
+    "product_line": "deebot",
+    "extra_files": ["_laser"],
+    "subscene_field": "value.aiResult.label",
+    "subscene_enums": ["100", "101", "102", "103", "104", "105", "106", "8"]
+  },
+  {
+    "mission_name": "ai_other",
+    "title": "流苏和电线，语义识别",
+    "description": "流苏和电线，语义识别",
+    "product_line": "deebot",
+    "extra_files": [],
+    "subscene_field": "value.aiResult.label",
+    "subscene_enums": ["1", "3", "4", "6", "9", "11", "14", "15", "18"]
+  },
+  {
+    "mission_name": "pet",
+    "title": "宠物",
+    "description": "宠物",
+    "product_line": "deebot",
+    "extra_files": [],
+    "subscene_field": "value.aiResult.label",
+    "subscene_enums": ["301", "302"]
+  },
+  {
+    "mission_name": "charge_failed",
+    "title": "回充失败时触发拍照",
+    "description": "回充失败时触发拍照",
+    "product_line": "deebot",
+    "extra_files": [],
+    "subscene_field": "",
+    "subscene_enums": []
+  },
+  {
+    "mission_name": "living_room",
+    "title": "客厅区域采集",
+    "description": "客厅区域采集。living_room 是 MetaData 采集策略，不是 value.currentArea=LivingRoom。",
+    "product_line": "deebot",
+    "extra_files": [],
+    "subscene_field": "",
+    "subscene_enums": []
+  },
+  {
+    "mission_name": "doorsills",
+    "title": "门槛采集",
+    "description": "门槛采集；按分区拍照",
+    "product_line": "deebot",
+    "extra_files": [],
+    "subscene_field": "value.mapObject",
+    "subscene_enums": ["doorsill", "furniture", "virtualwall"]
+  },
+  {
+    "mission_name": "pet_related",
+    "title": "宠物周边采集",
+    "description": "宠物周边采集",
+    "product_line": "deebot",
+    "extra_files": [],
+    "subscene_field": "value.mapObject",
+    "subscene_enums": ["furniture"]
+  },
+  {
+    "mission_name": "ir_stain",
+    "title": "红外污渍采集",
+    "description": "红外污渍采集",
+    "product_line": "deebot",
+    "extra_files": ["_ir"],
+    "subscene_field": "value.MotionState",
+    "subscene_enums": ["1", "2", "3", "4", "5", "6", "7", "8"]
+  },
+  {
+    "mission_name": "external_photo",
+    "title": "场景采集策略",
+    "description": "场景采集策略",
+    "product_line": "deebot",
+    "extra_files": [],
+    "subscene_field": "value.photoReason",
+    "subscene_enums": ["100-125"]
+  }
+]
