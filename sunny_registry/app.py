@@ -1,0 +1,427 @@
+"""FastAPI application: registry API + Hub admin UI."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from .config import Settings, get_settings
+from .db import connect
+from . import security
+from .join import build_join_payload, join_markdown_for
+from .security import (
+    Principal,
+    can_delete_agent,
+    can_manage_card,
+    get_principal,
+    permissions_for,
+    require_admin,
+    require_agent_owner,
+    require_card_manager,
+    require_hub_user,
+    require_registered_peer,
+    require_viewer,
+)
+from .store import Store, StoreError
+
+WEB_DIR = Path(__file__).resolve().parents[1] / "web"
+
+
+class RegisterBody(BaseModel):
+    card: Dict[str, Any]
+    enrollment_source: str
+
+
+class CardBody(BaseModel):
+    card: Dict[str, Any]
+
+
+class TicketBody(BaseModel):
+    caller_id: Optional[str] = None
+    callee_id: str
+    skill_id: str
+
+
+class VerifyBody(BaseModel):
+    ticket: str
+    callee_id: Optional[str] = None
+    skill_id: Optional[str] = None
+
+
+class InvocationBody(BaseModel):
+    caller_id: Optional[str] = None
+    callee_id: str
+    skill_id: str
+    status: str = "ok"
+    trace_id: Optional[str] = None
+    ticket: Optional[str] = None
+
+
+class LoginBody(BaseModel):
+    username: str
+    password: str
+
+
+class UserCreateBody(BaseModel):
+    username: str
+    password: str
+    role: str = "developer"
+
+
+class AgentPatchBody(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    version: Optional[str] = None
+    skills: Optional[List[Dict[str, Any]]] = None
+    add_skills: Optional[List[Dict[str, Any]]] = None
+    remove_skill_ids: Optional[List[str]] = None
+    update_skills: Optional[List[Dict[str, Any]]] = None
+
+
+def _raise_store(exc: StoreError) -> None:
+    raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+def _with_access(principal: Principal, item: Dict[str, Any]) -> Dict[str, Any]:
+    created_by = item.get("created_by")
+    item["can_manage"] = can_manage_card(principal, item.get("agent_id") or "", created_by)
+    item["can_delete"] = can_delete_agent(principal, created_by)
+    return item
+
+
+def _me_payload(principal: Principal) -> Dict[str, Any]:
+    return {
+        "user_id": principal.user_id,
+        "username": principal.username or ("admin" if principal.is_admin else None),
+        "role": principal.kind if principal.is_hub_user else None,
+        "kind": principal.kind,
+        "permissions": permissions_for(principal),
+    }
+
+
+def create_app(settings: Optional[Settings] = None) -> FastAPI:
+    settings = settings or get_settings()
+    app = FastAPI(title="SUNNY Registry", version="0.1.0")
+    app.state.settings = settings
+    app.state.store = Store(connect(settings.db_path), settings)
+
+    from .seed import seed_if_empty, seed_users
+
+    seed_users(app.state.store)
+    if settings.seed_on_empty:
+        seed_if_empty(app.state.store)
+
+    @app.exception_handler(StoreError)
+    async def store_error_handler(_request: Request, exc: StoreError):
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    @app.get("/api/v1/health")
+    def health(request: Request) -> Dict[str, Any]:
+        packet = build_join_payload(settings, request, include_token=False)
+        return {
+            "ok": True,
+            "service": "sunny-registry",
+            "role": "enterprise_agent_registry",
+            "agents": app.state.store.count_agents(),
+            "public_url": packet["public_url"],
+            "join": packet["join_md"],
+        }
+
+    @app.post("/api/v1/auth/login")
+    def login(body: LoginBody) -> Dict[str, Any]:
+        user = app.state.store.authenticate_user(body.username, body.password)
+        if not user:
+            raise HTTPException(status_code=401, detail="invalid username or password")
+        issued = security.issue_session(settings.ticket_secret, user, settings.session_ttl_s)
+        principal = Principal(user["role"], user_id=user["user_id"], username=user["username"])
+        return {
+            "token": issued["token"],
+            "expires_at": issued["expires_at"],
+            "user": _me_payload(principal),
+        }
+
+    @app.get("/api/v1/auth/me")
+    def me(principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_hub_user(principal)
+        return _me_payload(principal)
+
+    @app.get("/api/v1/users")
+    def list_users(principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_admin(principal)
+        items = app.state.store.list_users()
+        return {"items": items, "count": len(items)}
+
+    @app.post("/api/v1/users")
+    def create_user(body: UserCreateBody, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_admin(principal)
+        return app.state.store.create_user(body.username, body.password, body.role)
+
+    @app.delete("/api/v1/users/{user_id}")
+    def delete_user(user_id: str, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_admin(principal)
+        if principal.user_id and principal.user_id == user_id and app.state.store.count_admins() <= 1:
+            raise HTTPException(status_code=409, detail="cannot delete the last admin")
+        return app.state.store.delete_user(user_id)
+
+    @app.get("/api/v1/join")
+    def join_json(
+        request: Request,
+        include_token: bool = False,
+        principal: Principal = Depends(get_principal),
+    ) -> Dict[str, Any]:
+        if include_token:
+            require_admin(principal)
+        return build_join_payload(settings, request, include_token=include_token)
+
+    @app.get("/api/v1/join.md")
+    def join_markdown(
+        request: Request,
+        include_token: bool = False,
+        download: bool = False,
+        principal: Principal = Depends(get_principal),
+    ) -> PlainTextResponse:
+        if include_token:
+            require_admin(principal)
+        headers = {}
+        if download:
+            headers["Content-Disposition"] = 'attachment; filename="sunny-join.md"'
+        return PlainTextResponse(
+            join_markdown_for(settings, request, include_token=include_token),
+            media_type="text/markdown; charset=utf-8",
+            headers=headers,
+        )
+
+    @app.post("/api/v1/agents")
+    def register(
+        body: RegisterBody,
+        request: Request,
+        principal: Principal = Depends(get_principal),
+    ) -> Dict[str, Any]:
+        enroll = request.headers.get("x-sunny-enroll")
+        if body.enrollment_source not in {"self", "hub"}:
+            raise HTTPException(status_code=400, detail="enrollment_source must be self or hub")
+        if body.enrollment_source == "hub":
+            require_hub_user(principal)
+            actor = principal.actor
+        else:
+            if not enroll or not security._cmp(enroll, settings.enroll_token):
+                raise HTTPException(status_code=401, detail="valid X-Sunny-Enroll required for self register")
+            actor = principal.actor if principal.is_hub_user else "agent:self"
+        created_by = principal.user_id if principal.is_hub_user else None
+        result = app.state.store.register(body.card, body.enrollment_source, actor, created_by=created_by)
+        return _with_access(principal, result)
+
+    @app.get("/api/v1/agents")
+    def list_agents(
+        principal: Principal = Depends(get_principal),
+        q: Optional[str] = None,
+        workspace: Optional[str] = None,
+        enrollment_source: Optional[str] = None,
+        runtime_status: Optional[str] = None,
+        include_disabled: bool = True,
+    ) -> Dict[str, Any]:
+        require_viewer(principal)
+        only_registered = not principal.is_admin
+        items = app.state.store.list_agents(
+            include_disabled=include_disabled if principal.is_admin else False,
+            only_registered=only_registered,
+            q=q,
+            workspace=workspace,
+            enrollment_source=enrollment_source,
+            runtime_status=runtime_status,
+        )
+        items = [_with_access(principal, item) for item in items]
+        return {"items": items, "count": len(items)}
+
+    @app.get("/api/v1/agents/{agent_id}")
+    def get_agent(agent_id: str, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_viewer(principal)
+        detail = app.state.store.get_detail(agent_id)
+        if not principal.is_admin and detail["lifecycle"] != "registered":
+            raise HTTPException(status_code=404, detail="agent not found")
+        return _with_access(principal, detail)
+
+    @app.put("/api/v1/agents/{agent_id}")
+    def update_agent(
+        agent_id: str,
+        body: CardBody,
+        principal: Principal = Depends(get_principal),
+    ) -> Dict[str, Any]:
+        row = app.state.store.get_row(agent_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="agent not found")
+        require_card_manager(principal, agent_id, row["created_by"] if "created_by" in row.keys() else None)
+        return _with_access(principal, app.state.store.update_card(agent_id, body.card, principal.actor))
+
+    @app.patch("/api/v1/agents/{agent_id}")
+    def patch_agent(
+        agent_id: str,
+        body: AgentPatchBody,
+        principal: Principal = Depends(get_principal),
+    ) -> Dict[str, Any]:
+        row = app.state.store.get_row(agent_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="agent not found")
+        require_card_manager(principal, agent_id, row["created_by"] if "created_by" in row.keys() else None)
+        patch = body.model_dump(exclude_unset=True) if hasattr(body, "model_dump") else body.dict(exclude_unset=True)
+        return _with_access(principal, app.state.store.patch_card(agent_id, patch, principal.actor))
+
+    @app.delete("/api/v1/agents/{agent_id}")
+    def delete_agent(agent_id: str, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        row = app.state.store.get_row(agent_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="agent not found")
+        require_agent_owner(principal, row["created_by"] if "created_by" in row.keys() else None)
+        return app.state.store.delete_agent(agent_id, principal.actor)
+
+    @app.post("/api/v1/agents/{agent_id}/disable")
+    def disable_agent(agent_id: str, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_admin(principal)
+        return app.state.store.set_lifecycle(agent_id, "disabled", principal.actor)
+
+    @app.post("/api/v1/agents/{agent_id}/enable")
+    def enable_agent(agent_id: str, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_admin(principal)
+        return app.state.store.set_lifecycle(agent_id, "registered", principal.actor)
+
+    @app.post("/api/v1/agents/{agent_id}/keys")
+    def issue_agent_key(agent_id: str, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_admin(principal)
+        return app.state.store.issue_agent_key(agent_id, principal.actor)
+
+    @app.post("/api/v1/agents/{agent_id}/heartbeat")
+    def heartbeat(agent_id: str, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        if not (principal.is_admin or principal.agent_id == agent_id):
+            raise HTTPException(status_code=403, detail="heartbeat must use this agent's key")
+        return app.state.store.heartbeat(agent_id, principal.actor)
+
+    @app.get("/api/v1/agents/{agent_id}/revisions")
+    def revisions(agent_id: str, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_viewer(principal)
+        return {"items": app.state.store.revisions(agent_id)}
+
+    @app.get("/api/v1/agents/{agent_id}/revisions/{rev}")
+    def revision_card(agent_id: str, rev: int, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_admin(principal)
+        return app.state.store.revision_card(agent_id, rev)
+
+    @app.get("/api/v1/search")
+    def search(
+        principal: Principal = Depends(get_principal),
+        skill: Optional[str] = Query(default=None),
+        tag: Optional[str] = Query(default=None),
+        workspace: Optional[str] = Query(default=None),
+        q: Optional[str] = Query(default=None),
+    ) -> Dict[str, Any]:
+        require_viewer(principal)
+        items = [_with_access(principal, item) for item in app.state.store.search(skill_id=skill, tag=tag, workspace=workspace, q=q)]
+        return {"items": items, "count": len(items)}
+
+    @app.post("/api/v1/tickets")
+    def issue_ticket(body: TicketBody, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_registered_peer(principal)
+        caller = body.caller_id
+        if principal.is_agent:
+            caller = principal.agent_id
+        if not caller:
+            raise HTTPException(status_code=400, detail="caller_id required")
+        if principal.is_agent and caller != principal.agent_id:
+            raise HTTPException(status_code=403, detail="caller must be the authenticated agent")
+        callee = app.state.store.get_detail(body.callee_id)
+        if callee["lifecycle"] != "registered":
+            raise HTTPException(status_code=409, detail="callee is not registered")
+        skill = app.state.store.skill_on_agent(body.callee_id, body.skill_id)
+        if not skill:
+            raise HTTPException(status_code=404, detail="skill not on callee card")
+        if skill["side_effects"] in {"write", "execute_sql"} and not principal.is_admin:
+            raise HTTPException(status_code=403, detail="write/execute_sql skills are not callable by peers")
+        issued = security.issue_ticket(
+            settings.ticket_secret,
+            caller,
+            body.callee_id,
+            body.skill_id,
+            settings.ticket_ttl_s,
+        )
+        app.state.store.record_ticket(issued["payload"])
+        return {
+            "ticket": issued["ticket"],
+            "expires_at": issued["expires_at"],
+            "caller_id": caller,
+            "callee_id": body.callee_id,
+            "skill_id": body.skill_id,
+            "jti": issued["jti"],
+        }
+
+    @app.post("/api/v1/tickets/verify")
+    def verify_ticket(body: VerifyBody, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_registered_peer(principal)
+        payload = security.verify_ticket(settings.ticket_secret, body.ticket)
+        if body.callee_id and body.callee_id != payload["callee"]:
+            raise HTTPException(status_code=403, detail="ticket callee mismatch")
+        if body.skill_id and body.skill_id != payload["skill"]:
+            raise HTTPException(status_code=403, detail="ticket skill mismatch")
+        if principal.is_agent and principal.agent_id not in {payload["caller"], payload["callee"]}:
+            raise HTTPException(status_code=403, detail="ticket not for this agent")
+        return {"ok": True, "payload": payload}
+
+    @app.post("/api/v1/invocations")
+    def record_invocation(body: InvocationBody, principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_registered_peer(principal)
+        caller = body.caller_id
+        if principal.is_agent:
+            caller = principal.agent_id
+        if not caller:
+            raise HTTPException(status_code=400, detail="caller_id required")
+        ticket_jti = None
+        if body.ticket:
+            payload = security.verify_ticket(settings.ticket_secret, body.ticket)
+            if payload["caller"] != caller or payload["callee"] != body.callee_id or payload["skill"] != body.skill_id:
+                raise HTTPException(status_code=403, detail="ticket does not match invocation")
+            ticket_jti = payload["jti"]
+        return app.state.store.record_invocation(
+            caller, body.callee_id, body.skill_id, body.status, body.trace_id, ticket_jti, principal.actor
+        )
+
+    @app.get("/api/v1/graph")
+    def graph(principal: Principal = Depends(get_principal)) -> Dict[str, Any]:
+        require_admin(principal)
+        return app.state.store.graph()
+
+    @app.get("/api/v1/activity")
+    def activity(principal: Principal = Depends(get_principal), limit: int = 80) -> Dict[str, Any]:
+        require_admin(principal)
+        return {"items": app.state.store.activity(limit=min(limit, 200))}
+
+    if WEB_DIR.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(WEB_DIR / "assets")), name="assets")
+
+        def _html(path: Path) -> FileResponse:
+            return FileResponse(str(path), media_type="text/html; charset=utf-8")
+
+        @app.get("/")
+        def admin_index() -> FileResponse:
+            return _html(WEB_DIR / "index.html")
+
+        @app.get("/{path:path}")
+        def admin_spa(path: str) -> FileResponse:
+            if path.startswith("api/"):
+                raise HTTPException(status_code=404, detail="not found")
+            candidate = WEB_DIR / path
+            if candidate.is_file():
+                media = "text/html; charset=utf-8" if candidate.suffix == ".html" else None
+                if media:
+                    return FileResponse(str(candidate), media_type=media)
+                return FileResponse(str(candidate))
+            return _html(WEB_DIR / "index.html")
+
+    return app
+
+
+app = create_app()
