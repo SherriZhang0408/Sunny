@@ -1,0 +1,488 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://sunny.local/schemas/sunny-card.schema.json",
+  "title": "SUNNY Agent Card",
+  "description": "企业内策展目录使用的 Agent 名片。顶层对齐 A2A v1.0 AgentCard；企业字段全部放在 x-sunny。禁止写入密钥、连接串或真实 token。",
+  "type": "object",
+  "additionalProperties": true,
+  "propertyNames": {
+    "$ref": "#/definitions/safePropertyName"
+  },
+  "required": [
+    "name",
+    "description",
+    "version",
+    "supportedInterfaces",
+    "capabilities",
+    "defaultInputModes",
+    "defaultOutputModes",
+    "skills",
+    "x-sunny"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "type": "string",
+      "description": "可选。兼容仍把协议版本写在卡顶层的 A2A 0.3 实现。"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "description": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 2000
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+([.-][A-Za-z0-9.-]+)?$",
+      "description": "名片自身版本，不是业务 Agent 内部 Skill 版本。"
+    },
+    "documentationUrl": {
+      "type": "string",
+      "minLength": 1
+    },
+    "iconUrl": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider": {
+      "$ref": "#/definitions/provider"
+    },
+    "supportedInterfaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/agentInterface"
+      }
+    },
+    "capabilities": {
+      "$ref": "#/definitions/capabilities"
+    },
+    "securitySchemes": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/securityScheme"
+      },
+      "propertyNames": {
+        "$ref": "#/definitions/safePropertyName"
+      }
+    },
+    "security": {
+      "type": "array",
+      "description": "OpenAPI 风格：一组方案名 → scopes。P0 使用 sunnyTicket。",
+      "items": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "defaultInputModes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/mediaType"
+      }
+    },
+    "defaultOutputModes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/mediaType"
+      }
+    },
+    "skills": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/skill"
+      }
+    },
+    "x-sunny": {
+      "$ref": "#/definitions/sunnyCardExt"
+    }
+  },
+  "definitions": {
+    "safePropertyName": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "pattern": "(?i)(password|passwd|secret|token|api[_-]?key|authorization|connection[_-]?string|private[_-]?key|access[_-]?key)"
+      }
+    },
+    "dottedId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*([._-][a-z0-9]+)+$",
+      "minLength": 3,
+      "maxLength": 128
+    },
+    "mediaType": {
+      "type": "string",
+      "pattern": "^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$",
+      "examples": ["application/json", "text/plain"]
+    },
+    "placeholderUrl": {
+      "type": "string",
+      "description": "绝对 URL。样例与未部署环境允许 *.internal.example；禁止在此写入带用户信息的连接串。",
+      "pattern": "^https?://[^\\s/$.?#][^\\s]*$",
+      "not": {
+        "pattern": "(?i)(://[^/@\\s]+:[^/@\\s]+@|jdbc:|mongodb(\\+srv)?:)"
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["organization", "url"],
+      "properties": {
+        "organization": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "$ref": "#/definitions/placeholderUrl"
+        }
+      }
+    },
+    "agentInterface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "protocolBinding", "protocolVersion"],
+      "properties": {
+        "url": {
+          "$ref": "#/definitions/placeholderUrl"
+        },
+        "protocolBinding": {
+          "type": "string",
+          "enum": ["HTTP+JSON", "JSONRPC", "GRPC"]
+        },
+        "protocolVersion": {
+          "type": "string",
+          "minLength": 1,
+          "examples": ["1.0", "0.3"]
+        },
+        "tenant": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "streaming": {
+          "type": "boolean",
+          "default": false
+        },
+        "pushNotifications": {
+          "type": "boolean",
+          "default": false
+        },
+        "extendedAgentCard": {
+          "type": "boolean",
+          "default": false
+        },
+        "extensions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/extension"
+          }
+        }
+      }
+    },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uri"],
+      "properties": {
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "params": {
+          "type": "object"
+        }
+      }
+    },
+    "securityScheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["http", "apiKey", "oauth2", "openIdConnect", "mutualTLS"]
+        },
+        "description": {
+          "type": "string"
+        },
+        "scheme": {
+          "type": "string",
+          "description": "HTTP 认证方案，例如 Bearer。"
+        },
+        "bearerFormat": {
+          "type": "string",
+          "description": "例如 SUNNY-TICKET。只描述格式，不放票本身。"
+        },
+        "name": {
+          "type": "string"
+        },
+        "in": {
+          "type": "string",
+          "enum": ["header", "query", "cookie"]
+        }
+      }
+    },
+    "jsonSchemaObject": {
+      "type": "object",
+      "description": "嵌入的 JSON Schema（draft-07 子集），描述本 skill 的输入或输出。",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["object"]
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "properties": {
+          "type": "object"
+        },
+        "additionalProperties": {},
+        "anyOf": {
+          "type": "array"
+        },
+        "oneOf": {
+          "type": "array"
+        }
+      },
+      "additionalProperties": true
+    },
+    "skill": {
+      "type": "object",
+      "additionalProperties": true,
+      "propertyNames": {
+        "$ref": "#/definitions/safePropertyName"
+      },
+      "required": ["id", "name", "description", "tags", "x-sunny"],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/dottedId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 8
+        },
+        "tags": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "inputModes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/mediaType"
+          }
+        },
+        "outputModes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/mediaType"
+          }
+        },
+        "x-sunny": {
+          "$ref": "#/definitions/sunnySkillExt"
+        }
+      }
+    },
+    "sunnyCardExt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_id",
+        "workspace",
+        "discovery",
+        "access_tier",
+        "lifecycle",
+        "not_exposed",
+        "invoke_auth",
+        "invoke_identity",
+        "scratch_access"
+      ],
+      "properties": {
+        "agent_id": {
+          "$ref": "#/definitions/dottedId"
+        },
+        "workspace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "隔离域标签。P0 不分 personal/team/prod，只作服务工作区名字（ADR-002）。"
+        },
+        "invoke_identity": {
+          "type": "string",
+          "enum": ["agent_service"],
+          "description": "调用方只出示 Agent 服务账号。禁止用户代持（ADR-002）。"
+        },
+        "scratch_access": {
+          "type": "string",
+          "enum": ["none"],
+          "description": "跨 Agent 调用不进个人 scratch。"
+        },
+        "discovery": {
+          "type": "string",
+          "enum": ["registered_peers", "private", "approval_required"],
+          "description": "registered_peers = 已登记 Agent 默认可互发现（ADR-001）。"
+        },
+        "access_tier": {
+          "type": "string",
+          "enum": ["S0", "S1", "S2"]
+        },
+        "lifecycle": {
+          "type": "string",
+          "enum": ["draft", "registered", "disabled"]
+        },
+        "not_exposed": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "内部存在但禁止出现在 skills[] 的能力。"
+        },
+        "source_assets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "invoke_auth": {
+          "type": "string",
+          "enum": ["sunny_ticket"],
+          "description": "P0：Registry 签发的短时调用票。票本身不得写入本对象。"
+        },
+        "contact": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "owner": {
+              "type": "string"
+            },
+            "channel": {
+              "type": "string"
+            }
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "sunnySkillExt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_class",
+        "side_effects",
+        "input_schema",
+        "output_schema"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "side_effects": {
+                "enum": ["write", "execute_sql"]
+              }
+            },
+            "required": ["side_effects"]
+          },
+          "then": {
+            "properties": {
+              "data_class": {
+                "const": "restricted"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "data_class": {
+          "type": "string",
+          "enum": ["public", "internal", "restricted"]
+        },
+        "side_effects": {
+          "type": "string",
+          "enum": ["read", "write", "execute_sql"]
+        },
+        "source_asset": {
+          "type": "string"
+        },
+        "source_skill": {
+          "type": "string"
+        },
+        "invoke": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "path"],
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": ["POST"]
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^/sunny/invoke/[a-z][a-z0-9._-]+$"
+            }
+          }
+        },
+        "input_schema": {
+          "$ref": "#/definitions/jsonSchemaObject"
+        },
+        "output_schema": {
+          "$ref": "#/definitions/jsonSchemaObject"
+        },
+        "when_not_to_use": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

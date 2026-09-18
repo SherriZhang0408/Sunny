@@ -1,0 +1,254 @@
+{
+  "name": "AI 数据智能体",
+  "description": "科沃斯 AI DATA AGENT（Hermes）。对外只提供采集策略枚举查询与 ai_collect 余量查询；不开放模型调用、CVAT 建任务、现场 SQL 或整段对话。",
+  "version": "0.1.0",
+  "documentationUrl": "https://sunny.internal.example/docs/specs/sunny-card",
+  "provider": {
+    "organization": "科沃斯 / AI 数据智能体",
+    "url": "https://aidata.internal.example/"
+  },
+  "supportedInterfaces": [
+    {
+      "url": "https://aidata.internal.example/sunny/v1",
+      "protocolBinding": "HTTP+JSON",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "extendedAgentCard": false,
+    "extensions": [
+      {
+        "uri": "https://sunny.local/extensions/card/v0.1",
+        "description": "SUNNY 企业扩展：工作空间、发现策略、技能槽与副作用声明。",
+        "required": true
+      }
+    ]
+  },
+  "securitySchemes": {
+    "sunnyTicket": {
+      "type": "http",
+      "scheme": "Bearer",
+      "bearerFormat": "SUNNY-TICKET",
+      "description": "由 SUNNY Registry 签发的短时调用票。audience 绑定调用方 agent_id 与 skill.id。票不写在本名片内。"
+    }
+  },
+  "security": [
+    {
+      "sunnyTicket": []
+    }
+  ],
+  "defaultInputModes": ["application/json"],
+  "defaultOutputModes": ["application/json"],
+  "skills": [
+    {
+      "id": "collect.strategy.query",
+      "name": "采集策略查询",
+      "description": "查询闭环采集策略枚举：mission_name 含义、增项文件、子场景分类字段。检索域锁在策略表与 ai_collect 字典，不是整库知识问答。",
+      "tags": ["collect", "strategy", "mission_name", "readonly", "warehouse"],
+      "examples": [
+        "living_room 是什么采集策略",
+        "地宝 2.0 有哪些 mission_name",
+        "pet 策略的子场景字段是什么"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"],
+      "x-sunny": {
+        "data_class": "internal",
+        "side_effects": "read",
+        "source_asset": "KB.API.Retrieve.v1",
+        "source_skill": "kb.retrieve",
+        "invoke": {
+          "method": "POST",
+          "path": "/sunny/invoke/collect.strategy.query"
+        },
+        "when_not_to_use": [
+          "按策略/机型查余量（改用 collect.volume.query）",
+          "Hive 表口径或临时需求清单（不对公开）",
+          "创建标注任务或调用模型"
+        ],
+        "input_schema": {
+          "type": "object",
+          "description": "至少提供 query 或 mission_name 之一。",
+          "additionalProperties": false,
+          "anyOf": [
+            { "required": ["query"] },
+            { "required": ["mission_name"] }
+          ],
+          "properties": {
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "description": "自然语言，仅在采集策略枚举内检索"
+            },
+            "mission_name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "采集策略枚举，如 living_room / laser / pet"
+            },
+            "product_line": {
+              "type": "string",
+              "enum": ["deebot", "lawnmower"]
+            },
+            "include_subscenes": {
+              "type": "boolean",
+              "default": true
+            },
+            "trace_id": {
+              "type": "string"
+            }
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ready", "mock", "items", "trace_id"],
+          "additionalProperties": false,
+          "properties": {
+            "ready": { "type": "boolean" },
+            "mock": { "type": "boolean" },
+            "trace_id": { "type": "string" },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "mission_name": { "type": "string" },
+                  "title": { "type": "string" },
+                  "description": { "type": "string" },
+                  "product_line": { "type": "string" },
+                  "extra_files": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "subscene_field": { "type": "string" },
+                  "subscene_enums": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "collect.volume.query",
+      "name": "采集数据量查询",
+      "description": "按白名单槽查询 ai_collect 余量（count）。不返回预览图，不返回可建任务的 DSL，不创建 CVAT 任务。",
+      "tags": ["collect", "volume", "ai_collect", "readonly", "warehouse"],
+      "examples": [
+        "living_room 在机型 0gxgac 还有多少图",
+        "MetaData / laser 上月余量"
+      ],
+      "inputModes": ["application/json"],
+      "outputModes": ["application/json"],
+      "x-sunny": {
+        "data_class": "internal",
+        "side_effects": "read",
+        "source_asset": "ES.API.QueryAiCollect.v1",
+        "source_skill": "es.query_ai_collect",
+        "invoke": {
+          "method": "POST",
+          "path": "/sunny/invoke/collect.volume.query"
+        },
+        "when_not_to_use": [
+          "问 mission_name 是什么（改用 collect.strategy.query）",
+          "预览原图或导出样本",
+          "创建特殊标注任务",
+          "按 Ontology 槽 sn/did/时间窗取融合属性（不对公开）"
+        ],
+        "input_schema": {
+          "type": "object",
+          "description": "至少填一个过滤槽。机型用 robotType，不用 ft。",
+          "additionalProperties": false,
+          "anyOf": [
+            { "required": ["mission_name"] },
+            { "required": ["quest_name"] },
+            { "required": ["robotType"] },
+            { "required": ["compute_date"] }
+          ],
+          "properties": {
+            "mission_name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "采集策略，如 living_room"
+            },
+            "quest_name": {
+              "type": "string",
+              "minLength": 1,
+              "description": "协议类别，如 MetaData"
+            },
+            "robotType": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "compute_date": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from", "to"],
+              "properties": {
+                "from": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+                "to": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+              }
+            },
+            "sn": {
+              "type": "string",
+              "minLength": 1,
+              "description": "可选。映射现网 meta.sn，调用方自行保证有权查询该 SN。"
+            },
+            "trace_id": {
+              "type": "string"
+            }
+          }
+        },
+        "output_schema": {
+          "type": "object",
+          "required": ["ready", "mock", "count", "filters_echo", "trace_id"],
+          "additionalProperties": false,
+          "properties": {
+            "ready": { "type": "boolean" },
+            "mock": { "type": "boolean" },
+            "count": { "type": "integer", "minimum": 0 },
+            "es_index": { "type": "string", "const": "ai_collect" },
+            "filters_echo": { "type": "object" },
+            "trace_id": { "type": "string" },
+            "message": { "type": "string" }
+          }
+        }
+      }
+    }
+  ],
+  "x-sunny": {
+    "agent_id": "aidata.hermes",
+    "workspace": "ecovacs.aidata",
+    "discovery": "registered_peers",
+    "access_tier": "S1",
+    "lifecycle": "draft",
+    "invoke_auth": "sunny_ticket",
+    "invoke_identity": "agent_service",
+    "scratch_access": "none",
+    "source_assets": [
+      "KB.API.Retrieve.v1",
+      "ES.API.QueryAiCollect.v1"
+    ],
+    "not_exposed": [
+      "model.invoke",
+      "cvat.create_special_task",
+      "hermes.chat",
+      "kb.retrieve",
+      "es.query_ai_collect.compose",
+      "es.query_ai_collect.preview",
+      "db.query_by_device",
+      "db.query_scenes",
+      "db.query_lifecycle"
+    ],
+    "contact": {
+      "owner": "AI 数据智能体",
+      "channel": "internal"
+    },
+    "notes": "对外两个 skill 已评审通过。调用身份为 Agent 服务账号，不进个人 scratch。接口 URL 为占位，不是现网主机。"
+  }
+}
