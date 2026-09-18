@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+.env.*
+*.egg-info/
+dist/
+build/
+
+# 测试 / 类型检查 / 覆盖率
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# 运行时数据与密钥（库文件、Adapter key 只留本地）
+*.local.json
+data/*.db
+data/*.db-journal
+data/adapter-keys/
+*.key
+*.pem
+
+# 日志与临时文件
+*.log
+*.tmp
+*.temp
+*.bak
+*~
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+
+# AI 工作记忆与编辑器本地态（不属于产品架构）
+.ai-memory.md
+.cursor/
+
+# 空占位，正式稿在 docs/research/
+/docs/AI数据智能体接入ChatBI-条件.md
