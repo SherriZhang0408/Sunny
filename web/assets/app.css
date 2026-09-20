@@ -274,10 +274,15 @@ textarea.short { min-height: 88px; }
 }
 .badge.online { background: var(--ok-bg); color: var(--ok); }
 .badge.stale { background: var(--stale-bg); color: var(--stale); }
+.badge.unreachable { background: var(--stale-bg); color: var(--stale); }
 .badge.unknown, .badge.waiting, .badge.registered, .badge.draft { background: #eef2f5; color: var(--down); }
 .badge.disabled { background: #f3f4f6; color: var(--text-secondary); }
 .badge.hub { background: var(--hub-bg); color: var(--hub); }
 .badge.self { background: var(--self-bg); color: var(--self); }
+.badge.pending, .badge.approval_required { background: var(--stale-bg); color: var(--stale); }
+.badge.rejected { background: var(--danger-bg); color: var(--danger); }
+.badge.private { background: #eef2f5; color: var(--text-secondary); }
+.badge.approved { background: var(--ok-bg); color: var(--ok); }
 .tag { background: #eef3f7; color: var(--text-secondary); }
 .meta { display: flex; justify-content: space-between; color: var(--text-muted); font-size: var(--fs-meta); }
 

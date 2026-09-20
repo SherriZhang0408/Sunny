@@ -106,6 +106,25 @@
     );
   }
 
+  function approvalSeg(approval) {
+    return (
+      '<div class="seg" role="group" aria-label="按审批状态筛选">' +
+      [
+        ["", "全部审批"],
+        ["pending", "待审批"],
+        ["rejected", "已拒绝"],
+      ].map(function (pair) {
+        const selected = approval === pair[0];
+        return (
+          '<button type="button" class="seg-item' + (selected ? " active" : "") +
+          '" data-approval="' + pair[0] + '" aria-pressed="' + (selected ? "true" : "false") + '">' +
+          pair[1] + "</button>"
+        );
+      }).join("") +
+      "</div>"
+    );
+  }
+
   function pad2(value) {
     return (value < 10 ? "0" : "") + value;
   }
@@ -132,6 +151,15 @@
       escapeHtml(text) + "</time>";
   }
 
+  function probeHtml(probe) {
+    if (!probe || probe.checked_at == null) return "尚未探活";
+    const state = probe.ok ? "可达" : "不可达";
+    const cat = !probe.ok && probe.category ? " · " + probe.category : "";
+    const url = probe.url ? " · " + probe.url : "";
+    const err = probe.ok || !probe.error ? "" : " · " + probe.error;
+    return escapeHtml(state + cat + url + err) + " · " + datetimeHtml(probe.checked_at);
+  }
+
   // 机器枚举值继续走 API；展示层统一中文，避免 Waiting / registered 中英混排
   const CHIP_LABELS = {
     status: {
@@ -139,6 +167,7 @@
       stale: "心跳过期",
       unknown: "等待中",
       waiting: "等待中",
+      unreachable: "不可达",
       disabled: "已禁用",
     },
     source: {
@@ -147,8 +176,20 @@
     },
     lifecycle: {
       registered: "已登记",
+      deprecated: "已弃用",
       disabled: "已禁用",
       draft: "草稿",
+    },
+    discovery: {
+      registered_peers: "对等可见",
+      private: "私有",
+      approval_required: "待审批",
+    },
+    approval: {
+      none: "无需审批",
+      pending: "待审批",
+      approved: "已通过",
+      rejected: "已拒绝",
     },
   };
 
@@ -157,8 +198,14 @@
     register: "登记",
     update: "更新",
     disable: "停用",
+    deprecate: "弃用",
     enable: "启用",
     heartbeat: "心跳",
+    probe: "探活",
+    pull: "拉取",
+    refresh: "刷新",
+    approve: "通过",
+    reject: "拒绝",
     issue_key: "签发密钥",
     invoke: "调用上报",
     invocation: "调用上报",
@@ -171,8 +218,15 @@
 
   const SUMMARY_LABELS = {
     "card updated": "名片已更新",
+    "card pulled from well-known": "已从 URL 拉取名片",
+    "card refreshed from well-known": "已从来源 URL 刷新名片",
+    "registered via well-known pull": "Well-Known 拉取登记",
+    "card approved": "名片已通过审批",
+    "card rejected": "名片已拒绝",
     heartbeat: "心跳",
+    probe: "探活",
     disable: "停用",
+    deprecate: "已弃用",
     enable: "启用",
     "new agent key issued": "已签发新密钥",
     "registered via agent push": "智能体主动登记",
@@ -229,6 +283,17 @@
   function lifecycleLabel(item) {
     const lifecycle = item.lifecycle || "unknown";
     return badge(lifecycle, chipLabel("lifecycle", lifecycle));
+  }
+
+  function discoveryLabel(item) {
+    const status = item.approval_status || "";
+    if (status === "rejected") return badge("rejected", chipLabel("approval", "rejected"));
+    if (status === "pending" || item.discovery === "approval_required") {
+      return badge("pending", chipLabel("approval", "pending"));
+    }
+    if (item.discovery === "private") return badge("private", chipLabel("discovery", "private"));
+    if (status === "approved") return badge("approved", chipLabel("approval", "approved"));
+    return "";
   }
 
   function setGateMode(on) {
@@ -359,7 +424,7 @@
       '<article class="repo" data-id="' + escapeHtml(item.agent_id) + '">' +
         '<div class="repo-head">' +
           "<div><h2>" + escapeHtml(item.name) + '</h2><div class="id mono">' + escapeHtml(item.agent_id) + "</div></div>" +
-          '<div class="badges">' + statusLabel(item) + sourceLabel(item) + "</div>" +
+          '<div class="badges">' + statusLabel(item) + sourceLabel(item) + discoveryLabel(item) + "</div>" +
         "</div>" +
         "<p>" + escapeHtml(item.description) + "</p>" +
         '<div class="tags">' + tags + "</div>" +
@@ -373,27 +438,37 @@
     const q = query.get("q") || "";
     const source = query.get("source") || "";
     const status = query.get("status") || "";
+    const approval = query.get("approval") || "";
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (source) params.set("enrollment_source", source);
     if (status) params.set("runtime_status", status);
+    if (approval) params.set("approval_status", approval);
     const data = await api("/api/v1/agents?" + params.toString());
     main.innerHTML =
       '<div class="hero"><div>' +
         "<h1>浏览智能体</h1>" +
         "<p>像看镜像仓库一样看智能体：谁在线、谁是自己推上来的、谁是管理台代填的。看见名片不等于能调用。</p>" +
-      "</div><div class=\"filters\">" + sourceSeg(source) + "</div></div>" +
+      "</div><div class=\"filters\">" + sourceSeg(source) + approvalSeg(approval) + "</div></div>" +
       (data.items.length
         ? '<div class="grid">' + data.items.map(repoCard).join("") + "</div>"
         : '<div class="empty">还没有匹配的智能体。</div>');
     main.querySelectorAll(".repo").forEach(function (el) {
       el.onclick = function () { location.hash = "#/agents/" + el.getAttribute("data-id"); };
     });
-    main.querySelectorAll(".seg-item").forEach(function (el) {
+    main.querySelectorAll(".seg-item[data-source]").forEach(function (el) {
       el.onclick = function () {
         const next = new URLSearchParams(query.toString());
         const value = el.getAttribute("data-source");
         if (value) next.set("source", value); else next.delete("source");
+        location.hash = "#/explore?" + next.toString();
+      };
+    });
+    main.querySelectorAll(".seg-item[data-approval]").forEach(function (el) {
+      el.onclick = function () {
+        const next = new URLSearchParams(query.toString());
+        const value = el.getAttribute("data-approval");
+        if (value) next.set("approval", value); else next.delete("approval");
         location.hash = "#/explore?" + next.toString();
       };
     });
@@ -407,7 +482,9 @@
       const ext = s["x-sunny"] || {};
       return (
         "<tr><td class=\"mono\">" + escapeHtml(s.id) + "</td><td>" + escapeHtml(s.name) +
-        "</td><td>" + escapeHtml(effectLabel(ext.side_effects)) + "</td><td>" + escapeHtml((s.tags || []).join(", ")) +
+        "</td><td>" + escapeHtml(effectLabel(ext.side_effects)) +
+        "</td><td>" + escapeHtml(ext.data_class || "") +
+        "</td><td>" + escapeHtml((s.tags || []).join(", ")) +
         "</td></tr>"
       );
     }).join("");
@@ -425,12 +502,12 @@
           "<div><h1>" + escapeHtml(item.name) + "</h1>" +
           '<div class="id mono">' + escapeHtml(item.agent_id) + "</div>" +
           '<div class="badges">' + statusLabel(item) + sourceLabel(item) +
-          lifecycleLabel(item) + "</div></div>" +
+          lifecycleLabel(item) + discoveryLabel(item) + "</div></div>" +
           (actionsHtml ? '<div class="actions">' + actionsHtml + "</div>" : "") +
         "</div>" +
         '<div class="tabs">' +
           tabBtn("overview", "概览", tab) +
-          tabBtn("card", "智能体名片", tab) +
+          tabBtn("card", item.card_view === "public" ? "公开名片" : "完整名片", tab) +
           (item.can_manage ? tabBtn("edit", "编辑", tab) : "") +
           tabBtn("history", "变更历史", tab) +
         "</div>" +
@@ -439,7 +516,13 @@
 
     const body = document.getElementById("tab-body");
     if (tab === "card") {
-      body.innerHTML = "<pre class=\"card-json\">" + escapeHtml(JSON.stringify(item.card, null, 2)) + "</pre>";
+      const cardHint = item.card_view === "public"
+        ? '<p class="hint">公开名片：已隐藏 restricted 技能。完整卡走鉴权 Extended Card。</p>'
+        : (can("manage_all_agents")
+          ? '<p class="hint">完整名片。鉴权扩展卡：<a class="mono" href="/api/v1/agents/' +
+            encodeURIComponent(id) + '/extended">GET /extended</a></p>'
+          : "");
+      body.innerHTML = cardHint + "<pre class=\"card-json\">" + escapeHtml(JSON.stringify(item.card, null, 2)) + "</pre>";
     } else if (tab === "edit" && item.can_manage) {
       renderEditor(body, item);
     } else if (tab === "history") {
@@ -450,25 +533,47 @@
           "<dt>工作空间</dt><dd class=\"mono\">" + escapeHtml(item.workspace) + "</dd>" +
           "<dt>版本</dt><dd>" + escapeHtml(item.version) + "</dd>" +
           "<dt>访问档位</dt><dd>" + escapeHtml(item.access_tier || "") + "</dd>" +
+          "<dt>对等可见</dt><dd>" + escapeHtml(chipLabel("discovery", item.discovery || "registered_peers")) + "</dd>" +
+          "<dt>审批</dt><dd>" + escapeHtml(chipLabel("approval", item.approval_status || "none")) +
+            (item.approval_reason ? " · " + escapeHtml(item.approval_reason) : "") + "</dd>" +
           "<dt>最近心跳</dt><dd>" + datetimeHtml(item.last_heartbeat_at) + "</dd>" +
+          "<dt>名片探活</dt><dd>" + probeHtml(item.probe) + "</dd>" +
+          (item.card_source_url
+            ? "<dt>名片来源 URL</dt><dd class=\"mono\">" + escapeHtml(item.card_source_url) + "</dd>"
+            : "") +
           "<dt>更新时间</dt><dd>" + datetimeHtml(item.updated_at) + "</dd>" +
           "<dt>创建者</dt><dd>" + escapeHtml(item.owner_username || "—") + "</dd>" +
         "</dl>" +
         "<h3>技能</h3>" +
-        '<div class="edge-list"><table><thead><tr><th>标识</th><th>名称</th><th>副作用</th><th>标签</th></tr></thead><tbody>' +
+        (item.card_view === "public"
+          ? '<p class="hint">对等看到公开技能；restricted 技能不在此列表。</p>'
+          : (item.has_extended
+            ? '<p class="hint">完整名片含 restricted 技能。也可 <a class="mono" href="/api/v1/agents/' +
+              encodeURIComponent(id) + '/extended">GET /extended</a></p>'
+            : "")) +
+        '<div class="edge-list"><table><thead><tr><th>标识</th><th>名称</th><th>副作用</th><th>数据档</th><th>标签</th></tr></thead><tbody>' +
         skills + "</tbody></table></div>";
     }
     document.querySelectorAll(".tabs button").forEach(function (btn) {
       btn.onclick = function () { location.hash = "#/agents/" + id + "/" + btn.getAttribute("data-tab"); };
     });
     const disable = document.getElementById("btn-disable");
+    const deprecate = document.getElementById("btn-deprecate");
     const enable = document.getElementById("btn-enable");
     const editBtn = document.getElementById("btn-edit");
     const deleteBtn = document.getElementById("btn-delete");
     const heartbeat = document.getElementById("btn-hb");
+    const probeBtn = document.getElementById("btn-probe");
+    const refreshBtn = document.getElementById("btn-refresh");
+    const approveBtn = document.getElementById("btn-approve");
+    const rejectBtn = document.getElementById("btn-reject");
     const ticketBtn = document.getElementById("btn-ticket");
     if (disable) disable.onclick = async function () {
       await api("/api/v1/agents/" + encodeURIComponent(id) + "/disable", { method: "POST", body: "{}" });
+      render();
+    };
+    if (deprecate) deprecate.onclick = async function () {
+      await api("/api/v1/agents/" + encodeURIComponent(id) + "/deprecate", { method: "POST", body: "{}" });
       render();
     };
     if (enable) enable.onclick = async function () {
@@ -481,6 +586,19 @@
       await api("/api/v1/agents/" + encodeURIComponent(id) + "/heartbeat", { method: "POST", body: "{}" });
       render();
     };
+    if (probeBtn) probeBtn.onclick = async function () {
+      await api("/api/v1/agents/" + encodeURIComponent(id) + "/probe", { method: "POST", body: "{}" });
+      render();
+    };
+    if (refreshBtn) refreshBtn.onclick = async function () {
+      await api("/api/v1/agents/" + encodeURIComponent(id) + "/refresh", { method: "POST", body: "{}" });
+      render();
+    };
+    if (approveBtn) approveBtn.onclick = async function () {
+      await api("/api/v1/agents/" + encodeURIComponent(id) + "/approve", { method: "POST", body: "{}" });
+      render();
+    };
+    if (rejectBtn) rejectBtn.onclick = function () { rejectModal(item); };
     if (ticketBtn) ticketBtn.onclick = function () { ticketModal(item); };
   }
 
@@ -644,6 +762,39 @@
     paint();
   }
 
+  function rejectModal(item) {
+    modal.classList.remove("hidden");
+    modal.innerHTML =
+      '<div class="sheet"><h2>拒绝上架</h2>' +
+      "<p>拒绝后对等仍不可见。开发者改卡会重新进入待审批。</p>" +
+      '<label>原因</label><textarea id="reject-reason" class="short" placeholder="写给创建者看的原因"></textarea>' +
+      '<p class="error" id="reject-err"></p>' +
+      '<div class="actions">' +
+        controlBtn("确认拒绝", { variant: "danger", id: "reject-go" }) +
+        controlBtn("取消", { id: "reject-close" }) +
+      "</div></div>";
+    document.getElementById("reject-close").onclick = function () { modal.classList.add("hidden"); };
+    document.getElementById("reject-go").onclick = async function () {
+      const err = document.getElementById("reject-err");
+      err.textContent = "";
+      const reason = document.getElementById("reject-reason").value.trim();
+      if (!reason) {
+        err.textContent = "请填写拒绝原因";
+        return;
+      }
+      try {
+        await api("/api/v1/agents/" + encodeURIComponent(item.agent_id) + "/reject", {
+          method: "POST",
+          body: JSON.stringify({ reason: reason }),
+        });
+        modal.classList.add("hidden");
+        render();
+      } catch (e) {
+        err.textContent = e.message;
+      }
+    };
+  }
+
   function confirmDelete(item) {
     modal.classList.remove("hidden");
     modal.innerHTML =
@@ -679,15 +830,29 @@
   function agentActions(item) {
     const manage = [];
     if (item.can_manage) manage.push(controlBtn("编辑", { variant: "primary", id: "btn-edit" }));
+    if (item.can_manage && item.card_source_url) manage.push(controlBtn("刷新名片", { id: "btn-refresh" }));
     if (item.can_delete) manage.push(controlBtn("删除", { variant: "danger", id: "btn-delete" }));
     if (can("disable_agents")) {
-      manage.push(item.lifecycle === "disabled"
-        ? controlBtn("启用", { variant: "success", id: "btn-enable" })
-        : controlBtn("停用", { variant: "warning", id: "btn-disable" }));
+      if (item.lifecycle === "disabled") {
+        manage.push(controlBtn("启用", { variant: "success", id: "btn-enable" }));
+      } else if (item.lifecycle === "deprecated") {
+        manage.push(controlBtn("恢复", { variant: "success", id: "btn-enable" }));
+        manage.push(controlBtn("停用", { variant: "warning", id: "btn-disable" }));
+      } else {
+        manage.push(controlBtn("弃用", { variant: "warning", id: "btn-deprecate" }));
+        manage.push(controlBtn("停用", { variant: "warning", id: "btn-disable" }));
+      }
+    }
+    if (can("approve_agents") && (item.approval_status === "pending" || item.discovery === "approval_required")) {
+      manage.push(controlBtn("通过", { variant: "success", id: "btn-approve" }));
+      if (item.approval_status !== "rejected") {
+        manage.push(controlBtn("拒绝", { variant: "danger", id: "btn-reject" }));
+      }
     }
     const extra = [];
     if (can("manage_all_agents")) extra.push(controlBtn("发送心跳", { id: "btn-hb" }));
-    if (can("issue_tickets")) extra.push(controlBtn("签发调用票", { id: "btn-ticket" }));
+    if (can("manage_all_agents")) extra.push(controlBtn("探活名片", { id: "btn-probe" }));
+    if (can("issue_tickets") && item.lifecycle === "registered") extra.push(controlBtn("签发调用票", { id: "btn-ticket" }));
     const gap = manage.length && extra.length ? '<span class="actions-gap" aria-hidden="true"></span>' : "";
     return manage.join("") + gap + extra.join("");
   }
@@ -904,6 +1069,27 @@
         "</div>" +
         '<p class="error" id="join-err"></p>' +
       "</div>" +
+      '<div class="panel"><form id="pull-form">' +
+        "<h2>从 URL 拉取名片</h2>" +
+        "<p>同事只给 sidecar 基址时用。Registry 去拉 <code>/.well-known/agent-card.json</code>，仍走 schema 与禁密钥门闩，不代发业务。</p>" +
+        "<label>Card 或 sidecar 基址</label>" +
+        '<input id="pull-url" type="url" placeholder="http://10.0.0.8:8091 或 …/.well-known/agent-card.json" />' +
+        (isAdmin
+          ? "<label>补 agent_id（可选，仅当卡上没有）</label>" +
+            '<input id="pull-agent-id" type="text" placeholder="your.org.agent" autocomplete="off" />'
+          : "") +
+        "<label>对等可见</label>" +
+        '<select id="pull-discovery">' +
+          '<option value="">沿用 Card</option>' +
+          '<option value="registered_peers">登记后对等可见</option>' +
+          '<option value="approval_required">需审批后可见</option>' +
+          '<option value="private">仅自己与管理员</option>' +
+        "</select>" +
+        '<div class="actions" style="margin-top:14px">' +
+          controlBtn("拉取登记", { variant: "primary", type: "submit" }) +
+        "</div>" +
+        '<p class="error" id="pull-err"></p>' +
+      "</form></div>" +
       '<div class="panel"><form id="pub">' +
         (isAdmin
           ? "<label>登记方式</label>" +
@@ -911,6 +1097,12 @@
             '<label id="enroll-label" hidden>注册令牌</label>' +
             '<input id="enroll" type="password" hidden />'
           : '<input id="src" type="hidden" value="hub" />') +
+        "<label>对等可见</label>" +
+        '<select id="pub-discovery">' +
+          '<option value="registered_peers">登记后对等可见（默认）</option>' +
+          '<option value="approval_required">需审批后可见</option>' +
+          '<option value="private">仅自己与管理员</option>' +
+        "</select>" +
         "<label>智能体名片 JSON</label><textarea id=\"card-json\" spellcheck=\"false\"></textarea>" +
         '<div class="actions" style="margin-top:14px">' + controlBtn("登记", { variant: "primary", type: "submit" }) + "</div>" +
         '<p class="error" id="pub-err"></p>' +
@@ -938,6 +1130,30 @@
     document.getElementById("export-join").onclick = function () { exportJoin(false); };
     const exportToken = document.getElementById("export-join-token");
     if (exportToken) exportToken.onclick = function () { exportJoin(true); };
+    document.getElementById("pull-form").onsubmit = async function (ev) {
+      ev.preventDefault();
+      const err = document.getElementById("pull-err");
+      err.textContent = "";
+      const url = document.getElementById("pull-url").value.trim();
+      if (!url) {
+        err.textContent = "请填写基址或 Card URL";
+        return;
+      }
+      const body = { url: url };
+      const overlay = document.getElementById("pull-agent-id");
+      if (overlay && overlay.value.trim()) body.agent_id = overlay.value.trim();
+      const pullDisc = document.getElementById("pull-discovery");
+      if (pullDisc && pullDisc.value) body.discovery = pullDisc.value;
+      try {
+        const data = await api("/api/v1/agents/pull", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        showOnceKey(data);
+      } catch (e) {
+        err.textContent = e.message;
+      }
+    };
     document.getElementById("pub").onsubmit = async function (ev) {
       ev.preventDefault();
       const err = document.getElementById("pub-err");
@@ -945,6 +1161,11 @@
       let card;
       try { card = JSON.parse(document.getElementById("card-json").value); }
       catch (e) { err.textContent = "JSON 无法解析"; return; }
+      const pubDisc = document.getElementById("pub-discovery");
+      if (pubDisc && pubDisc.value) {
+        if (!card["x-sunny"] || typeof card["x-sunny"] !== "object") card["x-sunny"] = {};
+        card["x-sunny"].discovery = pubDisc.value;
+      }
       try {
         const headersObj = headers();
         if (src.value === "self" && enroll) headersObj["X-Sunny-Enroll"] = enroll.value;
@@ -964,11 +1185,18 @@
 
   function showOnceKey(data) {
     modal.classList.remove("hidden");
-    modal.innerHTML =
-      '<div class="sheet"><h2>已登记 ' + escapeHtml(data.agent_id) + "</h2>" +
-      "<p>Agent key 只显示这一次，之后只存哈希。心跳和自更新用它。</p>" +
-      '<pre class="card-json">' + escapeHtml(data.agent_key) + "</pre>" +
-      '<div class="actions">' + controlBtn("查看名片", { variant: "primary", id: "go-agent" }) + "</div></div>";
+    if (!data.agent_key) {
+      modal.innerHTML =
+        '<div class="sheet"><h2>已更新 ' + escapeHtml(data.agent_id) + "</h2>" +
+        "<p>名片已从 URL 刷新。未重发 Agent key。</p>" +
+        '<div class="actions">' + controlBtn("查看名片", { variant: "primary", id: "go-agent" }) + "</div></div>";
+    } else {
+      modal.innerHTML =
+        '<div class="sheet"><h2>已登记 ' + escapeHtml(data.agent_id) + "</h2>" +
+        "<p>Agent key 只显示这一次，之后只存哈希。心跳和自更新用它。</p>" +
+        '<pre class="card-json">' + escapeHtml(data.agent_key) + "</pre>" +
+        '<div class="actions">' + controlBtn("查看名片", { variant: "primary", id: "go-agent" }) + "</div></div>";
+    }
     document.getElementById("go-agent").onclick = function () {
       modal.classList.add("hidden");
       location.hash = "#/agents/" + data.agent_id;
