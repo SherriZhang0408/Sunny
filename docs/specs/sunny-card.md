@@ -7,8 +7,7 @@
 | 样例 | [`../../cards/aidata.hermes.sample.json`](../../cards/aidata.hermes.sample.json) |
 | 决策 | [ADR-001](../decisions/ADR-001-开写前五件事.md) |
 
-> 对内这一份 JSON 是真源。以后导出 `/.well-known/agent-card.json` 时，剥掉 `x-sunny` 即可对齐 A2A v1.0。  
-> **未完成样例评审前，不建库、不写管理台。**
+> 对内这一份 JSON 是真源。sidecar 的 `/.well-known/agent-card.json` 挂完整 SUNNY Card（给 Registry `pull`）。Registry `GET /api/v1/agents/{id}` 对对等回公开卡（剥 `data_class=restricted` 技能，保留 `x-sunny`）。鉴权 `GET /api/v1/agents/{id}/extended` 回完整卡。`GET /api/v1/agents/{id}/a2a` 再剥 `x-sunny` 与 restricted，对齐 A2A v1.0。有任意 restricted 技能时 `capabilities.extendedAgentCard=true`。
 
 ---
 
@@ -65,9 +64,9 @@
 |------|------|------|
 | `agent_id` | `aidata.hermes` | 稳定主键，点号分段 |
 | `workspace` | 非空字符串 | 服务工作区标签；P0 不分三级（ADR-002） |
-| `discovery` | `registered_peers` / `private` / `approval_required` | 默认 `registered_peers`（ADR-001 §3）。`private` / `approval_required` 不对对等搜索、列表和出票 |
+| `discovery` | `registered_peers` / `private` / `approval_required` | 默认 `registered_peers`（ADR-001 §3）。`private` 不对对等开放。`approval_required` 须管理员通过后才变成 `registered_peers`；见 [policy.md](./policy.md) |
 | `access_tier` | `S0` / `S1` / `S2` | 纯登记 / sidecar / 原生 A2A |
-| `lifecycle` | `draft` / `registered` / `disabled` | 样例内容已评审，尚未挂进 Registry |
+| `lifecycle` | `draft` / `registered` / `deprecated` / `disabled` | 登记后由 Registry 维护。`deprecated` 能读不能出新票；`disabled` 对等不可见 |
 | `not_exposed` | 字符串数组 | 内部有、对外禁挂的 skill 或能力 |
 | `source_assets` | 资产卡 ID 列表 | 追溯用 |
 | `invoke_auth` | `sunny_ticket` | P0 短时票（ADR-001 §4） |
@@ -79,7 +78,7 @@
 
 | 字段 | 取值 | 说明 |
 |------|------|------|
-| `data_class` | `public` / `internal` / `restricted` | 公开目录 / 已登记对等 / 需 Extended Card。`restricted` 不进搜索，对等不能出票 |
+| `data_class` | `public` / `internal` / `restricted` | 公开目录 / 已登记对等 / 需 Extended Card。`restricted` 不进搜索、不进公开卡与 `/a2a`；对等不能出票。完整技能列表只在 `/extended`（或管理员 / 创建者 / 本 Agent 读卡） |
 | `side_effects` | `read` / `write` / `execute_sql` | `write` / `execute_sql` 默认不进跨 Agent 搜索，对等不能出票 |
 | `source_asset` / `source_skill` | 现网 ID | 从哪张资产卡收窄而来 |
 | `invoke.method` / `invoke.path` | HTTP | sidecar 对外路径，不是业务真源 URL |

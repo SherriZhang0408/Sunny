@@ -25,7 +25,7 @@ sunny-client（另一进程）
 |------|------|------|
 | `SUNNY_REGISTRY_URL` | `http://127.0.0.1:8088` | 本机连 Registry；跨机改成握手包里的基址 |
 | `SUNNY_ADAPTER_HOST` | `0.0.0.0` | sidecar 监听 |
-| `SUNNY_ADAPTER_PUBLIC_URL` | 局域网 IP + `:8091/sunny/v1` | 写入 Card 的对外接口，不会是 `0.0.0.0` |
+| `SUNNY_ADAPTER_PUBLIC_URL` | 局域网 IP + `:8091/sunny/v1` | 写入 Card 的对外接口，不会是 `0.0.0.0`。第二户 echo sidecar 用 `:8093` |
 | `SUNNY_ADAPTER_CARD` | `cards/aidata.hermes.sample.json` | 挂上时用的名片 |
 | `SUNNY_ADAPTER_KEY_FILE` | `data/adapter-keys/<agent_id>.key` | sidecar 自己的 `sak_` |
 | `SUNNY_ADMIN_TOKEN` / `SUNNY_ENROLL_TOKEN` | `sunny-dev-*` | 409 后签发 key / 首次自注册 |
@@ -41,6 +41,10 @@ Hub 已登记同一 `agent_id` 时，sidecar **只挂接口、不改 enrollment_
 ```bash
 python3 -m sunny_registry
 python3 -m sunny_adapter
+# 第二户：python3 -m sunny_echo  （:8092）
+# ECHO_URL=http://127.0.0.1:8092 SUNNY_ADAPTER_CARD=cards/lab.echo.sample.json \
+# SUNNY_ADAPTER_MAPPING=sunny_adapter/mappings/lab.echo.json SUNNY_ADAPTER_AGENT_ID=lab.echo \
+# SUNNY_ADAPTER_PORT=8093 python3 -m sunny_adapter
 ```
 
 Sidecar 启动时会：
@@ -48,8 +52,9 @@ Sidecar 启动时会：
 1. 用 enroll token 自注册；若 Hub 已登记过同一 `agent_id`，管理员签发一把新 key 再挂上
 2. 把 Card 里的 `supportedInterfaces[0].url` 改成 `SUNNY_ADAPTER_PUBLIC_URL`
 3. 按 `SUNNY_ADAPTER_HEARTBEAT_S` 心跳
+4. 匿名挂出完整 SUNNY Card：`/.well-known/agent-card.json`、`/.well-known/agent.json`、`/sunny/v1/card`（三份相同，带 `ETag`）
 
-钥匙写在 `data/adapter-keys/<agent_id>.key`，不进 Card、不进 Git。
+钥匙写在 `data/adapter-keys/<agent_id>.key`，不进 Card、不进 Git。剥掉 `x-sunny` 的 A2A 导出在 Registry `GET /api/v1/agents/{id}/a2a`，不在 sidecar。
 
 ## 映射与槽校验（P1）
 

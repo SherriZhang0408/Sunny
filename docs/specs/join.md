@@ -13,6 +13,7 @@
 3. 进程**监听** `0.0.0.0`，局域网可连；**宣告**地址必须是对端能打到的 URL，**禁止**把 `0.0.0.0` 写进 Card 或握手包。
 4. 默认可匿名拉取握手包（未登记也能读，否则鸡生蛋）。**注册令牌默认不写进文件**。管理员可选择带令牌导出。
 5. 看见名片 ≠ 能调用。握手包必须写清：登记后拿 `sak_`，调用走短时票，直打对方 sidecar。
+6. 握手包必须写清**何时来 / 何时不要来** Registry；对方要自己把这两段写进系统提示，Registry 不自动检测超界。
 
 ## 监听与宣告
 
@@ -59,6 +60,18 @@ Content-Type: application/json
 
 成功：`200`，`agent_key`（`sak_`）只出现这一次。`409`：`agent_id` 已占用。
 
+只交基址（sidecar 已挂出完整 SUNNY Card）：
+
+```http
+POST /api/v1/agents/pull
+X-Sunny-Enroll: $SUNNY_ENROLL_TOKEN
+Content-Type: application/json
+
+{"url": "http://<your-sidecar-host>:<port>"}
+```
+
+规格见 [well-known-pull.md](./well-known-pull.md)。
+
 ## JSON 字段（`GET /api/v1/join`）
 
 | 字段 | 含义 |
@@ -70,10 +83,13 @@ Content-Type: application/json
 | `lan_urls` | 探测到的局域网候选 |
 | `join_md` | `/api/v1/join.md` |
 | `enroll` | 方法、路径、头、`enrollment_source`、令牌占位或真实值、`token_included` |
+| `pull` | Well-Known 拉取：`POST /api/v1/agents/pull`，body `{url}` |
 | `card_required` | 卡级 / 技能级必填 |
 | `card_skeleton` | 可改的最小名片 |
-| `after_enroll` | 存 key、心跳、搜索、要票、直打 sidecar |
-| `rules` | 禁写密钥、发现≠访问、Registry 不转发 |
+| `after_enroll` | 存 key、心跳、搜索、MCP 发现目录、升版轮询、要票、直打 sidecar |
+| `when_to_use` / `when_not_to_use` | 超界才来 / 本机能做就不要来 |
+| `mcp` | `POST /mcp` JSON-RPC；工具以运行中 `TOOLS` 为准（`list_agents` / `search_registry` / `get_card` / `describe_access` / `join` 等）；`stdio` 为 `python3 -m sunny_registry.mcp_stdio` |
+| `rules` | 本机优先、禁写密钥、发现≠访问、MCP 不代调；restricted 只披露；`approval_required` 须人审 |
 
 ## 非目标
 

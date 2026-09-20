@@ -14,7 +14,7 @@
 | `search` | `GET /api/v1/search` | actor、查询槽、命中的 `agent_id`（最多 20） |
 | `ticket` | 出票成功或拒绝 | caller / callee / skill / `jti`；拒绝带 `reason` |
 | `invoke` | `POST /api/v1/invocations` | `trace_id`、`ticket_jti`、status |
-| `card` | 仍读 `revisions` | 登记、改卡、心跳、停用；按 `trace_id` 过滤时不混入 |
+| `card` | 仍读 `revisions`；探活另写入本表 | 登记、改卡、心跳、停用；`POST /probe` 与周期扫记可达/失败（含 url、`category`，不含票） |
 
 ## API
 
