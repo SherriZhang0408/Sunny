@@ -50,6 +50,9 @@ def test_hub_assets_served(client):
     js = client.get("/assets/app.js")
     assert js.status_code == 200
     assert "function controlBtn" in js.text
+    handshake = client.get("/assets/login-handshake.png")
+    assert handshake.status_code == 200
+    assert handshake.headers.get("content-type", "").startswith("image/")
 
 
 def test_hub_control_taxonomy_and_colors():
@@ -68,7 +71,14 @@ def test_hub_control_taxonomy_and_colors():
 
     assert 'classes = ["btn", "btn-" + variant]' in js
     assert "function sourceSeg" in js
-    assert "function approvalSeg" in js
+    assert "function approvalSelect" in js
+    assert 'id="approval-filter"' in js
+    assert "filter-bar" in js
+    assert "filter-select" in js
+    assert "hero-points" in js
+    assert "登记注册" in js
+    assert "要用别的智能体，先拿到它的名片" in js
+    assert 'filter-label">来源' not in js
     assert "待审批" in js
     assert "需审批后可见" in js
     assert 'id: "btn-approve"' in js
@@ -105,8 +115,30 @@ def test_hub_nav_permissions_wired():
     assert "loginView" in js
     assert 'class="login-page"' in js
     assert 'class="login-avatar"' in js
-    assert "/assets/sunny-logo.png" in js
-    assert 'class="login-brand-name">SUNNY<' in js
+    assert 'class="login-visual"' in js
+    assert "/assets/login-handshake.png" in js
+    css_text = (WEB / "assets" / "app.css").read_text(encoding="utf-8")
+    assert "border: 0" in css_text
+    assert ".login-visual" in css_text
+    assert ".login-gather" in css_text
+    assert ".agent-card-btn" in css_text
+    assert "position: fixed;" in css_text
+    assert "75vw" in css_text
+    assert "16 / 9" in css_text
+    assert "justify-content: center;" in css_text
+    assert "opacity: var(--login-visual-opacity)" in css_text
+    assert "box-shadow: none" in css_text
+    assert 'src="/assets/sunny-logo.png' in (WEB / "index.html").read_text(encoding="utf-8")
+    assert "<h1>智能体 · 名片</h1>" in js
+    assert "像人类交换名片" in js
+    assert 'class="login-brand-name">SUNNY<' not in js
+    assert 'class="login-foot">SUNNY Agent Hub<' in js
+    assert 'id="agent-card-btn"' in js
+    assert 'id="login-dialog"' in js
+    assert 'id="login-bits"' in js
+    assert "playAgentCardGather" in js
+    assert "点击打开登录" in js
+    assert 'agent-card-kicker">名片' not in js
     assert 'id="role-help"' in js
     assert "loginErrorText" in js
     assert "用户名或密码错误" in js
@@ -122,3 +154,29 @@ def test_hub_nav_permissions_wired():
     assert 'id: "btn-refresh"' in js
     assert "刷新名片" in js
     assert "usersView" in js
+    assert 'data-nav="settings"' in (WEB / "index.html").read_text(encoding="utf-8")
+    assert "settingsView" in js
+    assert "sunny.hub.prefs" in js
+    assert 'id: "light"' in js
+    assert 'id: "dark"' in js
+    assert 'id: "swiss"' in js
+    assert 'id: "tactical"' in js
+    assert 'id: "shop"' in js
+    assert "writePrefs" in js
+    assert "主题设置" in js
+    assert "界面字体" in js
+    assert "密度" in js
+
+
+def test_hub_theme_tokens():
+    css = (WEB / "assets" / "app.css").read_text(encoding="utf-8")
+    html = (WEB / "index.html").read_text(encoding="utf-8")
+    assert ":root {" in css
+    for theme in ("dark", "swiss", "tactical", "shop"):
+        assert 'html[data-theme="' + theme + '"]' in css
+    assert 'html[data-font="noto"]' in css
+    assert 'html[data-type-size="comfortable"]' in css
+    assert 'html[data-density="compact"]' in css
+    assert "sunny.hub.prefs" in html
+    assert ".theme-card" in css
+    assert ".settings-nav" in css

@@ -2,6 +2,93 @@
   const TOKEN_KEY = "sunny.hub.token";
   const USER_KEY = "sunny.hub.user";
   const LEGACY_TOKEN_KEY = "sunny.admin.token";
+  const PREFS_KEY = "sunny.hub.prefs";
+  const PREF_DEFAULTS = {
+    theme: "light",
+    font: "inter",
+    mono: "jetbrains",
+    typeSize: "default",
+    density: "default",
+    motion: "system",
+  };
+  const THEMES = [
+    { id: "light", name: "浅色", desc: "现用管理台，圆角与 Docker 蓝。" },
+    { id: "dark", name: "深色", desc: "同一套控件，改成夜间底。" },
+    { id: "swiss", name: "瑞士印刷", desc: "新闻纸、直角、航空红。" },
+    { id: "tactical", name: "战术遥测", desc: "炭黑底、磷光字、红选中。" },
+    { id: "shop", name: "机工告示", desc: "钢板、警戒条、ISO 状态色。" },
+  ];
+  const FONT_UI = [
+    { id: "inter", name: "Inter" },
+    { id: "noto", name: "Noto Sans SC" },
+    { id: "plex", name: "IBM Plex Sans" },
+    { id: "system", name: "系统字体" },
+  ];
+  const FONT_MONO = [
+    { id: "jetbrains", name: "JetBrains Mono" },
+    { id: "plex", name: "IBM Plex Mono" },
+    { id: "system", name: "系统等宽" },
+  ];
+  const TYPE_SIZES = [
+    { id: "compact", name: "紧凑" },
+    { id: "default", name: "默认" },
+    { id: "comfortable", name: "宽松" },
+  ];
+  const DENSITIES = [
+    { id: "compact", name: "紧凑" },
+    { id: "default", name: "默认" },
+    { id: "comfortable", name: "宽松" },
+  ];
+  const MOTIONS = [
+    { id: "system", name: "跟随系统" },
+    { id: "reduce", name: "减弱动效" },
+    { id: "ok", name: "保持动效" },
+  ];
+  const PREF_ENUMS = {
+    theme: THEMES.map(function (item) { return item.id; }),
+    font: FONT_UI.map(function (item) { return item.id; }),
+    mono: FONT_MONO.map(function (item) { return item.id; }),
+    typeSize: TYPE_SIZES.map(function (item) { return item.id; }),
+    density: DENSITIES.map(function (item) { return item.id; }),
+    motion: MOTIONS.map(function (item) { return item.id; }),
+  };
+
+  function pickEnum(value, allowed, fallback) {
+    return allowed.indexOf(value) >= 0 ? value : fallback;
+  }
+
+  function readPrefs() {
+    let raw = {};
+    try { raw = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") || {}; } catch (e) { raw = {}; }
+    const next = {};
+    Object.keys(PREF_DEFAULTS).forEach(function (key) {
+      next[key] = pickEnum(raw[key], PREF_ENUMS[key], PREF_DEFAULTS[key]);
+    });
+    return next;
+  }
+
+  function applyPrefs(prefs) {
+    const p = prefs || readPrefs();
+    const html = document.documentElement;
+    html.setAttribute("data-theme", p.theme);
+    html.setAttribute("data-font", p.font);
+    html.setAttribute("data-mono", p.mono);
+    html.setAttribute("data-type-size", p.typeSize);
+    html.setAttribute("data-density", p.density);
+    html.setAttribute("data-motion", p.motion);
+  }
+
+  function writePrefs(patch) {
+    const next = Object.assign(readPrefs(), patch || {});
+    Object.keys(PREF_DEFAULTS).forEach(function (key) {
+      next[key] = pickEnum(next[key], PREF_ENUMS[key], PREF_DEFAULTS[key]);
+    });
+    localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+    applyPrefs(next);
+    return next;
+  }
+
+  applyPrefs(readPrefs());
   const main = document.getElementById("main");
   const modal = document.getElementById("modal");
   const account = document.getElementById("account");
@@ -106,22 +193,23 @@
     );
   }
 
-  function approvalSeg(approval) {
+  function approvalSelect(approval) {
     return (
-      '<div class="seg" role="group" aria-label="按审批状态筛选">' +
-      [
-        ["", "全部审批"],
-        ["pending", "待审批"],
-        ["rejected", "已拒绝"],
-      ].map(function (pair) {
-        const selected = approval === pair[0];
-        return (
-          '<button type="button" class="seg-item' + (selected ? " active" : "") +
-          '" data-approval="' + pair[0] + '" aria-pressed="' + (selected ? "true" : "false") + '">' +
-          pair[1] + "</button>"
-        );
-      }).join("") +
-      "</div>"
+      '<label class="filter-select-wrap">' +
+        '<span class="sr-only">按审批状态筛选</span>' +
+        '<select class="filter-select" id="approval-filter" aria-label="按审批状态筛选">' +
+        [
+          ["", "全部审批"],
+          ["pending", "待审批"],
+          ["rejected", "已拒绝"],
+        ].map(function (pair) {
+          const selected = approval === pair[0];
+          return (
+            '<option value="' + pair[0] + '"' + (selected ? " selected" : "") + ">" +
+            pair[1] + "</option>"
+          );
+        }).join("") +
+        "</select></label>"
     );
   }
 
@@ -346,18 +434,95 @@
     });
   }
 
+  function motionReduced() {
+    const mode = document.documentElement.getAttribute("data-motion") || "system";
+    if (mode === "reduce") return true;
+    if (mode === "ok") return false;
+    return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function openNativeDialog(dialog) {
+    if (!dialog) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }
+
+  function closeNativeDialog(dialog) {
+    if (!dialog) return;
+    if (typeof dialog.close === "function" && dialog.open) dialog.close();
+    else dialog.removeAttribute("open");
+  }
+
+  function playAgentCardGather(onReady) {
+    const bits = document.getElementById("login-bits");
+    const btn = document.getElementById("agent-card-btn");
+    if (!btn) return;
+    const reduce = motionReduced();
+    const count = reduce ? 0 : 128;
+    if (bits) {
+      bits.innerHTML = "";
+      for (let i = 0; i < count; i += 1) {
+        const el = document.createElement("span");
+        el.className = "login-bit";
+        el.textContent = i % 2 === 0 ? "0" : "1";
+        const angle = (Math.PI * 2 * i) / count + (Math.random() * 0.7 - 0.35);
+        const dist = 40 + Math.random() * 300;
+        el.style.setProperty("--dx", Math.round(Math.cos(angle) * dist) + "px");
+        el.style.setProperty("--dy", Math.round(Math.sin(angle) * dist) + "px");
+        el.style.setProperty("--rot", Math.round(Math.random() * 720 - 360) + "deg");
+        el.style.setProperty("--delay", (Math.random() * 1.1).toFixed(2) + "s");
+        el.style.setProperty("--dur", (3.1 + Math.random() * 2.1).toFixed(2) + "s");
+        bits.appendChild(el);
+      }
+    }
+    function ready() {
+      if (bits) bits.classList.add("is-gone");
+      btn.classList.add("is-ready");
+      btn.disabled = false;
+      btn.setAttribute("aria-busy", "false");
+      if (onReady) onReady();
+    }
+    if (reduce) {
+      btn.classList.add("is-forming", "is-ready");
+      ready();
+      return;
+    }
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+    window.requestAnimationFrame(function () {
+      if (bits) bits.classList.add("is-visible");
+    });
+    window.setTimeout(function () {
+      if (bits) bits.classList.add("is-gathering");
+      btn.classList.add("is-forming");
+    }, 1440);
+    window.setTimeout(ready, 6800);
+  }
+
   function loginView(error) {
     setGateMode(true);
     if (account) account.hidden = true;
     main.innerHTML =
       '<section class="login-page">' +
-        '<div class="login-brand">' +
-          '<img class="login-avatar" src="/assets/sunny-logo.png?v=5" width="64" height="64" alt="SUNNY" />' +
-          '<div class="login-brand-name">SUNNY</div>' +
+        '<div class="login-visual" aria-hidden="true">' +
+          '<img class="login-avatar" src="/assets/login-handshake.png?v=6" width="1920" height="1080" alt="" />' +
         "</div>" +
+        '<div class="login-gather">' +
+          '<div class="login-bits" id="login-bits" aria-hidden="true"></div>' +
+          '<button type="button" class="agent-card-btn" id="agent-card-btn" disabled aria-busy="true" aria-haspopup="dialog" aria-controls="login-dialog" aria-label="Agent Card，点击打开登录">' +
+            '<span class="agent-card-face">' +
+              '<span class="agent-card-title">Agent</span>' +
+              '<span class="agent-card-title">Card</span>' +
+            "</span>" +
+            '<span class="agent-card-hint">点击打开登录</span>' +
+          "</button>" +
+        "</div>" +
+        '<footer class="login-foot">SUNNY Agent Hub</footer>' +
+      "</section>" +
+      '<dialog class="login-dialog" id="login-dialog" aria-labelledby="login-title">' +
         '<div class="login-card">' +
           '<div class="login-card-head">' +
-            "<h1>登录</h1>" +
+            '<h1 id="login-title">登录</h1>' +
             '<button type="button" class="role-help-btn" id="role-help-btn">权限说明</button>' +
           "</div>" +
           '<form id="login-form" autocomplete="on">' +
@@ -373,8 +538,7 @@
           "</form>" +
           '<p class="login-err" id="login-err"></p>' +
         "</div>" +
-        '<footer class="login-foot">SUNNY Agent Hub</footer>' +
-      "</section>" +
+      "</dialog>" +
       '<dialog class="role-help" id="role-help" aria-labelledby="role-help-title">' +
         '<div class="role-help-panel">' +
           '<div class="role-help-head">' +
@@ -396,7 +560,25 @@
         "</div>" +
       "</dialog>";
     bindRoleHelp();
-    if (error) showLoginError(loginErrorText(error));
+    const loginDialog = document.getElementById("login-dialog");
+    const agentBtn = document.getElementById("agent-card-btn");
+    function openLoginDialog() {
+      openNativeDialog(loginDialog);
+      const userInput = document.getElementById("login-username");
+      if (userInput) userInput.focus();
+    }
+    if (agentBtn) agentBtn.onclick = openLoginDialog;
+    if (loginDialog) {
+      loginDialog.addEventListener("click", function (ev) {
+        if (ev.target === loginDialog) closeNativeDialog(loginDialog);
+      });
+    }
+    playAgentCardGather(function () {
+      if (error) {
+        showLoginError(loginErrorText(error));
+        openLoginDialog();
+      }
+    });
     document.getElementById("login-form").onsubmit = async function (ev) {
       ev.preventDefault();
       showLoginError("");
@@ -408,6 +590,7 @@
             password: document.getElementById("login-password").value,
           }),
         });
+        closeNativeDialog(loginDialog);
         setSession(data.token, data.user);
         render();
       } catch (e) {
@@ -446,10 +629,19 @@
     if (approval) params.set("approval_status", approval);
     const data = await api("/api/v1/agents?" + params.toString());
     main.innerHTML =
-      '<div class="hero"><div>' +
-        "<h1>浏览智能体</h1>" +
-        "<p>像看镜像仓库一样看智能体：谁在线、谁是自己推上来的、谁是管理台代填的。看见名片不等于能调用。</p>" +
-      "</div><div class=\"filters\">" + sourceSeg(source) + approvalSeg(approval) + "</div></div>" +
+        '<div class="hero"><div class="hero-copy">' +
+        "<h1>智能体 · 名片</h1>" +
+        '<ul class="hero-points">' +
+          "<li>登记注册</li>" +
+          '<li class="is-card">名片卡片</li>' +
+          "<li>是否可用</li>" +
+          "<li>接入方式</li>" +
+        "</ul>" +
+        "<p>智能体的卡片就是它的【名片】。在注册中心交换名片之后，才能像人类交换名片那样对等沟通、表达意向。" +
+        "要用别的智能体，先拿到它的名片再出票去调；看见名片不等于已经能调用。</p>" +
+      "</div><div class=\"filters filter-bar\">" +
+        sourceSeg(source) + approvalSelect(approval) +
+      "</div></div>" +
       (data.items.length
         ? '<div class="grid">' + data.items.map(repoCard).join("") + "</div>"
         : '<div class="empty">还没有匹配的智能体。</div>');
@@ -464,14 +656,15 @@
         location.hash = "#/explore?" + next.toString();
       };
     });
-    main.querySelectorAll(".seg-item[data-approval]").forEach(function (el) {
-      el.onclick = function () {
+    const approvalFilter = document.getElementById("approval-filter");
+    if (approvalFilter) {
+      approvalFilter.onchange = function () {
         const next = new URLSearchParams(query.toString());
-        const value = el.getAttribute("data-approval");
+        const value = approvalFilter.value;
         if (value) next.set("approval", value); else next.delete("approval");
         location.hash = "#/explore?" + next.toString();
       };
-    });
+    }
   }
 
   async function agentView(id, tab) {
@@ -1211,6 +1404,7 @@
       const allowed = (
         nav === "explore" ||
         nav === "publish" ||
+        nav === "settings" ||
         (nav === "network" && can("view_graph")) ||
         (nav === "activity" && can("view_activity")) ||
         (nav === "users" && can("manage_users"))
@@ -1238,6 +1432,101 @@
 
   function denyView(message) {
     main.innerHTML = '<div class="empty">' + escapeHtml(message || "当前角色无权访问这一页。") + "</div>";
+  }
+
+  function prefSeg(items, selected, attr) {
+    return (
+      '<div class="seg" role="group">' +
+      items.map(function (item) {
+        const on = selected === item.id;
+        return (
+          '<button type="button" class="seg-item' + (on ? " active" : "") +
+          '" data-pref="' + escapeHtml(attr) + '" data-value="' + escapeHtml(item.id) +
+          '" aria-pressed="' + (on ? "true" : "false") + '">' +
+          escapeHtml(item.name) + "</button>"
+        );
+      }).join("") +
+      "</div>"
+    );
+  }
+
+  function settingsView(section) {
+    const tab = ["theme", "type", "display"].indexOf(section) >= 0 ? section : "theme";
+    const prefs = readPrefs();
+    const nav = [
+      ["theme", "主题"],
+      ["type", "字体"],
+      ["display", "显示"],
+    ].map(function (item) {
+      return (
+        '<a href="#/settings/' + item[0] + '" class="' + (tab === item[0] ? "active" : "") + '">' +
+        item[1] + "</a>"
+      );
+    }).join("");
+
+    let body = "";
+    if (tab === "theme") {
+      body =
+        "<h2>主题设置</h2>" +
+        '<p class="settings-lead">五套主题保存在本机，不进账号、不影响出票。浅色是现在的管理台；另外两套是常规深浅，三套是机械风。</p>' +
+        '<div class="theme-grid">' +
+        THEMES.map(function (theme) {
+          const on = prefs.theme === theme.id;
+          return (
+            '<button type="button" class="theme-card' + (on ? " active" : "") +
+            '" data-theme-id="' + theme.id + '" aria-pressed="' + (on ? "true" : "false") + '">' +
+            '<span class="theme-swatch theme-swatch-' + theme.id + '" aria-hidden="true"></span>' +
+            "<strong>" + escapeHtml(theme.name) + "</strong>" +
+            "<span>" + escapeHtml(theme.desc) + "</span></button>"
+          );
+        }).join("") +
+        "</div>";
+    } else if (tab === "type") {
+      body =
+        "<h2>字体</h2>" +
+        '<p class="settings-lead">界面字体管标题和正文，等宽字体管标识、时间与 JSON。</p>' +
+        '<div class="pref-block"><h3>界面字体</h3>' + prefSeg(FONT_UI, prefs.font, "font") + "</div>" +
+        '<div class="pref-block"><h3>等宽字体</h3>' + prefSeg(FONT_MONO, prefs.mono, "mono") + "</div>" +
+        '<div class="pref-block"><h3>字号</h3>' + prefSeg(TYPE_SIZES, prefs.typeSize, "typeSize") + "</div>" +
+        '<div class="pref-preview"><strong>智能体 · 名片</strong>' +
+        '<p class="hint">交换名片之后才能对等沟通。</p>' +
+        '<code class="mono">lab.inspector · aidata.hermes</code></div>';
+    } else {
+      body =
+        "<h2>显示</h2>" +
+        '<p class="settings-lead">密度改卡片和控件留白。动效只影响字标闪烁，不改业务。</p>' +
+        '<div class="pref-block"><h3>密度</h3>' + prefSeg(DENSITIES, prefs.density, "density") + "</div>" +
+        '<div class="pref-block"><h3>动效</h3>' + prefSeg(MOTIONS, prefs.motion, "motion") + "</div>" +
+        '<div class="actions">' + controlBtn("恢复默认", { id: "btn-prefs-reset" }) + "</div>";
+    }
+
+    main.innerHTML =
+      '<div class="hero"><div><h1>设置</h1><p>主题、字体和显示只作用于这台浏览器上的管理台。</p></div></div>' +
+      '<div class="settings"><nav class="settings-nav" aria-label="设置分类">' + nav +
+      '</nav><section class="settings-body panel">' + body + "</section></div>";
+
+    main.querySelectorAll("[data-theme-id]").forEach(function (btn) {
+      btn.onclick = function () {
+        writePrefs({ theme: btn.getAttribute("data-theme-id") });
+        settingsView("theme");
+      };
+    });
+    main.querySelectorAll("[data-pref]").forEach(function (btn) {
+      btn.onclick = function () {
+        const patch = {};
+        patch[btn.getAttribute("data-pref")] = btn.getAttribute("data-value");
+        writePrefs(patch);
+        settingsView(tab);
+      };
+    });
+    const reset = document.getElementById("btn-prefs-reset");
+    if (reset) {
+      reset.onclick = function () {
+        localStorage.removeItem(PREFS_KEY);
+        applyPrefs(readPrefs());
+        settingsView("display");
+      };
+    }
   }
 
   async function usersView() {
@@ -1330,6 +1619,7 @@
         if (!can("manage_users")) return denyView("只有管理员可以管理账号。");
         return await usersView();
       }
+      if (r.parts[0] === "settings") return settingsView(r.parts[1]);
       if (r.parts[0] === "agents" && r.parts[1]) return await agentView(r.parts[1], r.parts[2]);
       return await exploreView(r.query);
     } catch (e) {
