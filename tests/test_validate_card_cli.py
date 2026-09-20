@@ -28,7 +28,7 @@ def test_cli_usage_and_missing_file():
 
 
 def test_cli_ok_for_sample_cards():
-    for name in ("aidata.hermes.sample.json", "lab.inspector.sample.json"):
+    for name in ("aidata.hermes.sample.json", "lab.inspector.sample.json", "lab.echo.sample.json"):
         res = _run(str(ROOT / "cards" / name))
         assert res.returncode == 0, res.stdout + res.stderr
         assert res.stdout.startswith("OK ")

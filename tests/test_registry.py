@@ -64,6 +64,8 @@ def test_hub_register_and_search(client):
     listed = _admin(client, "get", "/api/v1/agents").json()
     assert listed["count"] == 1
 
+    beat = _admin(client, "post", "/api/v1/agents/aidata.hermes/heartbeat")
+    assert beat.status_code == 200
     found = _admin(client, "get", "/api/v1/search", params={"skill": "collect.volume.query"}).json()
     assert found["count"] == 1
     assert found["items"][0]["agent_id"] == "aidata.hermes"
@@ -102,6 +104,7 @@ def test_ticket_and_peer_discovery(client):
         json={"card": _card("lab.inspector.sample.json"), "enrollment_source": "self"},
         headers={"X-Sunny-Enroll": "enroll-test"},
     ).json()
+    assert _admin(client, "post", "/api/v1/agents/aidata.hermes/heartbeat").status_code == 200
 
     peer = client.get(
         "/api/v1/search",
@@ -195,7 +198,23 @@ def test_revisions_recorded(client):
     _admin(client, "post", "/api/v1/agents", json={"card": _card("aidata.hermes.sample.json"), "enrollment_source": "hub"})
     revs = _admin(client, "get", "/api/v1/agents/aidata.hermes/revisions").json()["items"]
     assert revs[0]["action"] == "create"
+    snapshot = _admin(client, "get", "/api/v1/agents/aidata.hermes/revisions/{0}".format(revs[0]["rev"]))
+    assert snapshot.status_code == 200
+    assert snapshot.json()["card"]["x-sunny"]["agent_id"] == "aidata.hermes"
+    missing = _admin(client, "get", "/api/v1/agents/aidata.hermes/revisions/999")
+    assert missing.status_code == 404
     _admin(client, "post", "/api/v1/agents/aidata.hermes/heartbeat")
     revs = _admin(client, "get", "/api/v1/agents/aidata.hermes/revisions").json()["items"]
     actions = [item["action"] for item in revs]
     assert "heartbeat" in actions
+
+
+def test_invalid_enrollment_source_rejected(client):
+    res = _admin(
+        client,
+        "post",
+        "/api/v1/agents",
+        json={"card": _card("aidata.hermes.sample.json"), "enrollment_source": "import"},
+    )
+    assert res.status_code == 400
+    assert "enrollment_source" in res.json()["detail"]

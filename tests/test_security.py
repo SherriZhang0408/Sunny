@@ -75,6 +75,7 @@ def _register_pair(client: TestClient):
         json={"card": _card("lab.inspector.sample.json"), "enrollment_source": "self"},
         headers={"X-Sunny-Enroll": "enroll-test"},
     ).json()
+    _admin(client, "post", "/api/v1/agents/aidata.hermes/heartbeat")
     return aidata, inspector
 
 
@@ -235,6 +236,24 @@ def test_agent_ticket_ignores_spoofed_caller_id(client):
     assert body["caller_id"] == "lab.inspector"
     payload = security.verify_ticket("ticket-test", body["ticket"])
     assert payload["caller"] == "lab.inspector"
+
+
+def test_auth_helpers_reject_bad_identity():
+    from fastapi import HTTPException
+
+    assert security.bearer_from_header(None) is None
+    assert security.bearer_from_header("Token abc") is None
+    assert security.bearer_from_header("Bearer  sak_x ") == "sak_x"
+    assert security.validate_username("Alice_1") == "Alice_1"
+    with pytest.raises(HTTPException):
+        security.validate_username("1admin")
+    with pytest.raises(HTTPException):
+        security.validate_password("123")
+    with pytest.raises(HTTPException):
+        security.validate_role("root")
+    assert security.hash_password("secret-1") != "secret-1"
+    assert security.verify_password("secret-1", security.hash_password("secret-1")) is True
+    assert security.verify_password("nope", security.hash_password("secret-1")) is False
 
 
 def test_expired_and_forged_session_rejected(client):

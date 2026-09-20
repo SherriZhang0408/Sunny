@@ -45,6 +45,7 @@ def _register_pair(client: TestClient):
         json={"card": _card("lab.inspector.sample.json"), "enrollment_source": "self"},
         headers={"X-Sunny-Enroll": "enroll-test"},
     ).json()
+    _admin(client, "post", "/api/v1/agents/aidata.hermes/heartbeat")
     return aidata, inspector
 
 
@@ -124,3 +125,13 @@ def test_denied_ticket_is_recorded(client):
 def test_activity_rejects_unknown_kind(client):
     res = _admin(client, "get", "/api/v1/activity", params={"kind": "explode"})
     assert res.status_code == 400
+
+
+def test_activity_q_filters_summary(client):
+    _register_pair(client)
+    _admin(client, "get", "/api/v1/search", params={"skill": "collect.volume.query"})
+    hits = _admin(client, "get", "/api/v1/activity", params={"q": "collect.volume.query"}).json()
+    assert hits["count"] >= 1
+    assert any("collect.volume.query" in json.dumps(item, ensure_ascii=False) for item in hits["items"])
+    empty = _admin(client, "get", "/api/v1/activity", params={"q": "zzzz-no-such-event"}).json()
+    assert empty["count"] == 0

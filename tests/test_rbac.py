@@ -135,7 +135,11 @@ def test_developer_owns_published_agent(client):
     assert patched.status_code == 200, patched.text
     body = patched.json()
     assert body["description"] == "开发者改过的说明"
-    assert {skill["id"] for skill in body["card"]["skills"]} == {"catalog.lookup", "lab.ping"}
+    assert {skill["id"] for skill in body["card"]["skills"]} == {
+        "catalog.lookup",
+        "lab.secret.lookup",
+        "lab.ping",
+    }
 
     removed = client.patch(
         "/api/v1/agents/lab.builder",
@@ -143,7 +147,10 @@ def test_developer_owns_published_agent(client):
         json={"remove_skill_ids": ["lab.ping"]},
     )
     assert removed.status_code == 200
-    assert [skill["id"] for skill in removed.json()["card"]["skills"]] == ["catalog.lookup"]
+    assert [skill["id"] for skill in removed.json()["card"]["skills"]] == [
+        "catalog.lookup",
+        "lab.secret.lookup",
+    ]
 
     deleted = client.delete("/api/v1/agents/lab.builder", headers=headers)
     assert deleted.status_code == 200

@@ -68,9 +68,20 @@ def test_hub_control_taxonomy_and_colors():
 
     assert 'classes = ["btn", "btn-" + variant]' in js
     assert "function sourceSeg" in js
+    assert "function approvalSeg" in js
+    assert "待审批" in js
+    assert "需审批后可见" in js
+    assert 'id: "btn-approve"' in js
+    assert 'id: "btn-deprecate"' in js
+    assert "已弃用" in js
+    assert "/api/v1/agents/" in js and "approve" in js
     assert 'class="seg"' in js
     assert "data-source" in js
     assert "function agentActions" in js
+    assert "function probeHtml" in js
+    assert "unreachable: \"不可达\"" in js
+    assert 'id: "btn-probe"' in js
+    assert "探活名片" in js
     assert 'variant: "primary"' in js
     assert 'variant: "danger"' in js
     assert 'variant: "warning"' in js
@@ -102,4 +113,12 @@ def test_hub_nav_permissions_wired():
     assert ".login-page" in (WEB / "assets" / "app.css").read_text(encoding="utf-8")
     assert "exploreView" in js
     assert "publishView" in js
+    assert "从 URL 拉取名片" in js
+    assert "/api/v1/agents/pull" in js
+    assert "完整名片" in js
+    assert "/extended" in js
+    assert "公开名片" in js
+    assert "restricted" in js
+    assert 'id: "btn-refresh"' in js
+    assert "刷新名片" in js
     assert "usersView" in js

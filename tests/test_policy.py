@@ -76,6 +76,7 @@ def _register_pair(client: TestClient):
         json={"card": _card("lab.inspector.sample.json"), "enrollment_source": "self"},
         headers={"X-Sunny-Enroll": "enroll-test"},
     ).json()
+    _admin(client, "post", "/api/v1/agents/aidata.hermes/heartbeat")
     return aidata, inspector
 
 
@@ -83,6 +84,9 @@ def test_policy_helpers():
     assert policy.is_peer_visible("registered_peers") is True
     assert policy.is_peer_visible("private") is False
     assert policy.is_peer_visible("approval_required") is False
+    assert policy.initial_approval_status("approval_required") == "pending"
+    assert policy.is_awaiting_approval("approval_required", "pending") is True
+    assert policy.is_awaiting_approval("registered_peers", "none") is False
     assert policy.is_skill_searchable("internal", "read") is True
     assert policy.is_skill_searchable("public", "read") is True
     assert policy.is_skill_searchable("restricted", "read") is False

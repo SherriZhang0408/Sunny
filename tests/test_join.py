@@ -6,7 +6,14 @@ from fastapi.testclient import TestClient
 
 from sunny_registry.app import create_app
 from sunny_registry.config import Settings
-from sunny_registry.join import PLACEHOLDER_URL, TOKEN_PLACEHOLDER, build_join_payload, render_join_markdown
+from sunny_registry.join import (
+    PLACEHOLDER_URL,
+    TOKEN_PLACEHOLDER,
+    WHEN_TO_USE,
+    build_join_payload,
+    mcp_tool_names,
+    render_join_markdown,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -58,6 +65,15 @@ def test_join_json_and_md_are_public(tmp_path):
     assert body["enroll"]["header"] == "X-Sunny-Enroll"
     assert body["enroll"]["token"] == TOKEN_PLACEHOLDER
     assert body["enroll"]["token_included"] is False
+    assert body["pull"]["path"] == "/api/v1/agents/pull"
+    assert body["mcp"]["path"] == "/mcp"
+    assert body["mcp"]["tools"] == mcp_tool_names()
+    assert body["mcp"]["stdio"] == "python3 -m sunny_registry.mcp_stdio"
+    assert "list_agents" in body["mcp"]["tools"]
+    assert "describe_access" in body["mcp"]["tools"]
+    assert "invoke" not in body["mcp"]["tools"]
+    assert body["when_to_use"] == WHEN_TO_USE
+    assert body["when_not_to_use"]
     assert "0.0.0.0" not in body["public_url"]
 
     md = client.get("/api/v1/join.md")
@@ -65,6 +81,14 @@ def test_join_json_and_md_are_public(tmp_path):
     assert "text/markdown" in md.headers["content-type"]
     text = md.text
     assert "企业注册中心" in text
+    assert "只交基址" in text
+    assert "何时来 Registry" in text
+    assert "本机能力优先" in text
+    assert "也可经 MCP 发现目录" in text
+    assert "card-changes" in text
+    assert "list_card_changes" in body["mcp"]["tools"]
+    assert "http://192.0.2.10:8088/mcp" in text
+    assert "http://192.0.2.10:8088/api/v1/agents/pull" in text
     assert "http://192.0.2.10:8088/api/v1/agents" in text
     assert TOKEN_PLACEHOLDER in text
     assert "enroll-test" not in text

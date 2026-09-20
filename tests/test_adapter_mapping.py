@@ -173,6 +173,29 @@ def test_http_route_maps_slots_and_probes_health(tmp_path):
     assert seen["body"] == {"q": "hello"}
 
 
+def test_mapping_rejects_agent_mismatch_and_http_without_url(tmp_path):
+    path = tmp_path / "bad.json"
+    path.write_text(
+        json.dumps(
+            {
+                "agent_id": "other.agent",
+                "routes": [{"skill_id": "echo.ping", "handler": "local"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(MappingError) as exc:
+        load_mapping(path, "lab.echo")
+    assert "does not match" in str(exc.value)
+
+    path.write_text(
+        json.dumps({"routes": [{"skill_id": "echo.ping", "handler": "http"}]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(MappingError):
+        load_mapping(path, "lab.echo")
+
+
 def test_mapping_missing_env_is_503(tmp_path):
     card_path = tmp_path / "echo.json"
     mapping_path = tmp_path / "echo.mapping.json"

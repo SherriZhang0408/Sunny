@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from urllib.parse import urlparse
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -31,7 +32,9 @@ class RoutedClient:
         path = parsed.path
         if parsed.query:
             path = "{0}?{1}".format(path, parsed.query)
-        if path.startswith("/sunny/") and self.adapter is not None:
+        if self.adapter is not None and (
+            path.startswith("/sunny/") or path.startswith("/.well-known/")
+        ):
             return getattr(self.adapter, method)(path, **kwargs)
         return getattr(self.registry, method)(path, **kwargs)
 
@@ -109,6 +112,53 @@ def test_search_then_invoke_strategy(pair):
     assert result["ready"] is True
     assert result["items"][0]["mission_name"] == "laser"
     assert result["_ticket"]["callee_id"] == "aidata.hermes"
+
+
+def test_well_known_serves_full_sunny_card(pair):
+    from sunny_registry.card_validate import validate_card
+
+    card_res = pair["adapter_tc"].get("/.well-known/agent-card.json")
+    alias = pair["adapter_tc"].get("/.well-known/agent.json")
+    v1 = pair["adapter_tc"].get("/sunny/v1/card")
+    assert card_res.status_code == 200
+    assert alias.status_code == 200
+    assert v1.status_code == 200
+    card = card_res.json()
+    assert card == alias.json() == v1.json()
+    assert card["x-sunny"]["agent_id"] == "aidata.hermes"
+    assert card["supportedInterfaces"][0]["url"] == "http://adapter/sunny/v1"
+    assert validate_card(card) == []
+    assert card_res.headers.get("etag") == '"0.1.0"'
+    assert "max-age=60" in (card_res.headers.get("cache-control") or "")
+
+    cached = pair["adapter_tc"].get(
+        "/.well-known/agent-card.json",
+        headers={"If-None-Match": '"0.1.0"'},
+    )
+    assert cached.status_code == 304
+    assert cached.headers.get("etag") == '"0.1.0"'
+
+
+def test_registry_can_pull_adapter_well_known(pair):
+    served = json.loads(json.dumps(pair["adapter_tc"].get("/.well-known/agent-card.json").json()))
+    served["x-sunny"]["agent_id"] = "lab.fromwell"
+    served["name"] = "lab.fromwell"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/.well-known/agent-card.json"):
+            return httpx.Response(200, json=served)
+        return httpx.Response(404)
+
+    pair["dual"].registry.app.state.store.settings.http_transport = httpx.MockTransport(handler)
+    pair["dual"].registry.app.state.store.settings.pull_timeout_s = 0.5
+    res = pair["dual"].post(
+        "http://registry/api/v1/agents/pull",
+        headers={"Authorization": "Bearer admin-test"},
+        json={"url": "http://sidecar.test:8091"},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["agent_id"] == "lab.fromwell"
+    assert res.json()["card_source_url"].endswith("/.well-known/agent-card.json")
 
 
 def test_invoke_rejects_missing_ticket(pair):

@@ -86,6 +86,7 @@ def test_list_runtime_status_online_unknown_disabled(client):
 
 def test_search_filters_workspace_and_q(client):
     _seed_pair(client)
+    assert _admin(client, "post", "/api/v1/agents/lab.inspector/heartbeat").status_code == 200
     headers = {"Authorization": "Bearer admin-test"}
 
     by_ws = client.get("/api/v1/search", params={"workspace": "ecovacs.aidata"}, headers=headers)
@@ -100,3 +101,9 @@ def test_search_filters_workspace_and_q(client):
 
     empty = client.get("/api/v1/search", params={"workspace": "no.such.space"}, headers=headers)
     assert empty.json()["count"] == 0
+
+    by_tag = client.get("/api/v1/search", params={"tag": "volume"}, headers=headers)
+    assert [item["agent_id"] for item in by_tag.json()["items"]] == ["aidata.hermes"]
+
+    no_tag = client.get("/api/v1/search", params={"tag": "no-such-tag"}, headers=headers)
+    assert no_tag.json()["count"] == 0
