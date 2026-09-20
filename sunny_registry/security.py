@@ -317,5 +317,6 @@ def permissions_for(principal: Principal) -> Dict[str, bool]:
         "issue_keys": admin,
         "manage_users": admin,
         "disable_agents": admin,
+        "approve_agents": admin,
         "issue_tickets": admin or principal.is_agent,
     }

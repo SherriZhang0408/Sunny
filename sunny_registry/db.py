@@ -6,6 +6,8 @@ import json
 import sqlite3
 from pathlib import Path
 
+from . import fts
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
@@ -97,6 +99,17 @@ CREATE INDEX IF NOT EXISTS idx_invocations_pair ON invocations(caller_id, callee
 CREATE INDEX IF NOT EXISTS idx_observe_created ON observe_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_observe_trace ON observe_events(trace_id);
 CREATE INDEX IF NOT EXISTS idx_observe_kind ON observe_events(kind);
+
+CREATE TABLE IF NOT EXISTS card_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    old_version TEXT NOT NULL,
+    new_version TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_card_changes_id ON card_changes(id);
+CREATE INDEX IF NOT EXISTS idx_card_changes_agent ON card_changes(agent_id, id);
 """
 
 
@@ -127,6 +140,42 @@ def migrate(conn: sqlite3.Connection) -> None:
     if "card_version" not in _column_names(conn, "tickets"):
         conn.execute("ALTER TABLE tickets ADD COLUMN card_version TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agents_discovery ON agents(discovery)")
+    columns = _column_names(conn, "agents")
+    if "probe_ok" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN probe_ok INTEGER")
+    if "probe_status_code" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN probe_status_code INTEGER")
+    if "probe_url" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN probe_url TEXT")
+    if "probe_error" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN probe_error TEXT")
+    if "probe_checked_at" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN probe_checked_at TEXT")
+    if "probe_category" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN probe_category TEXT")
+    if "card_refreshed_at" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN card_refreshed_at TEXT")
+    if "card_source_url" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN card_source_url TEXT")
+    columns = _column_names(conn, "agents")
+    if "approval_status" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN approval_status TEXT")
+    if "approval_reason" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN approval_reason TEXT")
+    if "approval_decided_at" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN approval_decided_at TEXT")
+    if "approval_decided_by" not in columns:
+        conn.execute("ALTER TABLE agents ADD COLUMN approval_decided_by TEXT")
+    conn.execute(
+        "UPDATE agents SET approval_status = 'pending' "
+        "WHERE discovery = 'approval_required' AND (approval_status IS NULL OR approval_status = '')"
+    )
+    conn.execute(
+        "UPDATE agents SET approval_status = 'none' "
+        "WHERE approval_status IS NULL OR approval_status = ''"
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agents_approval ON agents(approval_status)")
+    fts.migrate(conn)
     conn.commit()
 
 

@@ -6,9 +6,10 @@ import json
 import sqlite3
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from . import observe, policy, security
+from . import fts, observe, policy, probe, pull, security
+from .a2a_export import mark_extended_card
 from .card_validate import extract_agent_id, validate_card
 from .config import Settings
 
@@ -40,6 +41,8 @@ class Store:
     def __init__(self, conn: sqlite3.Connection, settings: Settings) -> None:
         self.conn = conn
         self.settings = settings
+        self.last_sweep: Optional[Dict[str, Any]] = None
+        self.sweep_timer = None
 
     def count_agents(self) -> int:
         row = self.conn.execute("SELECT COUNT(*) AS n FROM agents").fetchone()
@@ -131,16 +134,25 @@ class Store:
         ).fetchone()
         return row["agent_id"] if row else None
 
+    def _is_fresh(self, value: Optional[str], window_s: Optional[float] = None) -> bool:
+        parsed = parse_iso(value)
+        if parsed is None:
+            return False
+        limit = self.settings.heartbeat_stale_s if window_s is None else window_s
+        return datetime.now(timezone.utc) - parsed <= timedelta(seconds=limit)
+
     def runtime_status(self, row: sqlite3.Row) -> str:
         if row["lifecycle"] == "disabled":
             return "disabled"
-        last = parse_iso(row["last_heartbeat_at"])
-        if last is None:
+        if self._is_fresh(row["last_heartbeat_at"]):
+            return "online"
+        probe_at = row["probe_checked_at"] if "probe_checked_at" in row.keys() else None
+        probe_ok = row["probe_ok"] if "probe_ok" in row.keys() else None
+        if self._is_fresh(probe_at):
+            return "online" if probe_ok else "unreachable"
+        if parse_iso(row["last_heartbeat_at"]) is None:
             return "unknown"
-        age = datetime.now(timezone.utc) - last
-        if age > timedelta(seconds=self.settings.heartbeat_stale_s):
-            return "stale"
-        return "online"
+        return "stale"
 
     def _skills_from_card(self, card: dict) -> List[Dict[str, Any]]:
         items = []
@@ -217,7 +229,7 @@ class Store:
         sunny["lifecycle"] = lifecycle
         sunny["invoke_identity"] = "agent_service"
         sunny["scratch_access"] = "none"
-        return prepared
+        return mark_extended_card(prepared)
 
     def _row_to_summary(self, row: sqlite3.Row) -> Dict[str, Any]:
         card = json.loads(row["card_json"])
@@ -232,19 +244,81 @@ class Store:
             "enrollment_source": row["enrollment_source"],
             "lifecycle": row["lifecycle"],
             "discovery": policy.discovery_of(card, stored_discovery),
+            "approval_status": policy.approval_status_of(
+                row["approval_status"] if "approval_status" in row.keys() else None,
+                stored_discovery,
+            ),
+            "approval_reason": row["approval_reason"] if "approval_reason" in row.keys() else None,
+            "approval_decided_at": row["approval_decided_at"] if "approval_decided_at" in row.keys() else None,
+            "approval_decided_by": row["approval_decided_by"] if "approval_decided_by" in row.keys() else None,
             "runtime_status": self.runtime_status(row),
             "access_tier": (card.get("x-sunny") or {}).get("access_tier"),
             "skill_count": len(skills),
-            "skills": [{"id": s["id"], "name": s["name"], "tags": s["tags"]} for s in skills],
+            "skills": [
+                {
+                    "id": s["id"],
+                    "name": s["name"],
+                    "tags": s["tags"],
+                    "data_class": s["data_class"],
+                }
+                for s in skills
+            ],
             "last_heartbeat_at": row["last_heartbeat_at"],
+            "probe": self._probe_from_row(row),
+            "card_source_url": row["card_source_url"] if "card_source_url" in row.keys() else None,
             "created_by": row["created_by"] if "created_by" in row.keys() else None,
             "owner_username": self.owner_username(row["created_by"] if "created_by" in row.keys() else None),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
 
+    def _probe_from_row(self, row: sqlite3.Row) -> Dict[str, Any]:
+        keys = row.keys()
+        if "probe_checked_at" not in keys or row["probe_checked_at"] is None:
+            return {
+                "ok": None,
+                "url": None,
+                "status_code": None,
+                "error": None,
+                "category": None,
+                "checked_at": None,
+            }
+        ok_raw = row["probe_ok"] if "probe_ok" in keys else None
+        return {
+            "ok": None if ok_raw is None else bool(ok_raw),
+            "url": row["probe_url"] if "probe_url" in keys else None,
+            "status_code": row["probe_status_code"] if "probe_status_code" in keys else None,
+            "error": row["probe_error"] if "probe_error" in keys else None,
+            "category": row["probe_category"] if "probe_category" in keys else None,
+            "checked_at": row["probe_checked_at"],
+        }
+
     def get_row(self, agent_id: str) -> Optional[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM agents WHERE agent_id = ?", (agent_id,)).fetchone()
+
+    def _refresh_fts(self, agent_id: str) -> None:
+        row = self.get_row(agent_id)
+        if not row:
+            fts.delete(self.conn, agent_id)
+            return
+        fts.upsert(
+            self.conn,
+            agent_id,
+            row["name"],
+            row["description"],
+            json.loads(row["card_json"] or "{}"),
+        )
+
+    def _q_clause(self, q: Optional[str], like_sql: str, like_n: int, id_column: str) -> Tuple[Optional[str], List[Any]]:
+        text = (q or "").strip()
+        if not text:
+            return None, []
+        ids = fts.match_ids(self.conn, text)
+        if ids is not None:
+            clause, args = fts.sql_in(ids, id_column)
+            return clause, args
+        like = "%{0}%".format(text)
+        return like_sql, [like] * like_n
 
     def register(
         self,
@@ -253,6 +327,8 @@ class Store:
         actor: str,
         lifecycle: str = "registered",
         created_by: Optional[str] = None,
+        source_url: Optional[str] = None,
+        summary: Optional[str] = None,
     ) -> Dict[str, Any]:
         if enrollment_source not in {"self", "hub"}:
             raise StoreError(400, "enrollment_source must be self or hub")
@@ -293,8 +369,16 @@ class Store:
             actor,
             enrollment_source,
             prepared,
-            "registered via {0}".format("agent push" if enrollment_source == "self" else "hub form"),
+            summary
+            or "registered via {0}".format("agent push" if enrollment_source == "self" else "hub form"),
         )
+        if source_url:
+            self._set_card_source_url(agent_id, source_url)
+        self._write_approval(
+            agent_id,
+            policy.initial_approval_status(policy.discovery_of(prepared)),
+        )
+        self._refresh_fts(agent_id)
         self.conn.commit()
         row = self.get_row(agent_id)
         result = self._row_to_summary(row)
@@ -302,7 +386,193 @@ class Store:
         result["card"] = prepared
         return result
 
-    def update_card(self, agent_id: str, card: dict, actor: str) -> Dict[str, Any]:
+    def _write_approval(
+        self,
+        agent_id: str,
+        status: str,
+        reason: Optional[str] = None,
+        decided_by: Optional[str] = None,
+        decided_at: Optional[str] = None,
+    ) -> None:
+        self.conn.execute(
+            """
+            UPDATE agents
+            SET approval_status=?, approval_reason=?, approval_decided_at=?, approval_decided_by=?
+            WHERE agent_id=?
+            """,
+            (status, reason, decided_at, decided_by, agent_id),
+        )
+
+    def _set_card_source_url(self, agent_id: str, url: Optional[str]) -> None:
+        self.conn.execute(
+            "UPDATE agents SET card_source_url=? WHERE agent_id=?",
+            (url, agent_id),
+        )
+
+    def _http_transport(self, transport=None):
+        if transport is not None:
+            return transport
+        return getattr(self.settings, "http_transport", None)
+
+    def fetch_card_from_url(self, url: str, transport=None) -> Dict[str, Any]:
+        try:
+            return pull.fetch_sunny_card(
+                url,
+                self.settings.pull_timeout_s,
+                self._http_transport(transport),
+            )
+        except pull.PullError as exc:
+            raise StoreError(exc.status_code, exc.detail)
+
+    def apply_pulled_update(
+        self,
+        agent_id: str,
+        card: dict,
+        source_url: str,
+        actor: str,
+        allow_promote: bool = False,
+    ) -> Dict[str, Any]:
+        self.update_card(
+            agent_id,
+            card,
+            actor,
+            summary="card pulled from well-known",
+            allow_promote=allow_promote,
+        )
+        self._set_card_source_url(agent_id, source_url)
+        self.conn.commit()
+        self.record_event(
+            "card",
+            actor,
+            callee_id=agent_id,
+            summary="pull refresh {0}".format(agent_id),
+            detail={"source_url": source_url},
+        )
+        return self.get_detail(agent_id)
+
+    def refresh_from_source(self, agent_id: str, actor: str, transport=None) -> Dict[str, Any]:
+        row = self.get_row(agent_id)
+        if not row:
+            raise StoreError(404, "agent not found")
+        if row["lifecycle"] == "disabled":
+            raise StoreError(409, "enable the agent before refreshing the card")
+        source = row["card_source_url"] if "card_source_url" in row.keys() else None
+        if not source:
+            raise StoreError(400, "agent has no card_source_url; pull by url first")
+        try:
+            fetched = pull.fetch_sunny_card(
+                source,
+                self.settings.pull_timeout_s,
+                self._http_transport(transport),
+            )
+        except pull.PullError as exc:
+            self.record_event(
+                "card",
+                actor,
+                status="error",
+                callee_id=agent_id,
+                summary="refresh failed: {0}".format(exc.detail),
+                detail={"url": source, "error": exc.detail},
+            )
+            raise StoreError(exc.status_code, exc.detail)
+        incoming_id = extract_agent_id(fetched["card"])
+        if incoming_id and incoming_id != agent_id:
+            self.record_event(
+                "card",
+                actor,
+                status="error",
+                callee_id=agent_id,
+                summary="refresh rejected: agent_id changed",
+                detail={"url": source, "incoming_id": incoming_id},
+            )
+            raise StoreError(400, "x-sunny.agent_id cannot change")
+        try:
+            self.update_card(
+                agent_id,
+                fetched["card"],
+                actor,
+                summary="card refreshed from well-known",
+                allow_promote=False,
+            )
+        except StoreError:
+            self.record_event(
+                "card",
+                actor,
+                status="error",
+                callee_id=agent_id,
+                summary="refresh rejected: card invalid",
+                detail={"url": fetched.get("source_url") or source},
+            )
+            raise
+        self._set_card_source_url(agent_id, fetched["source_url"])
+        self._touch_card_refreshed_at(agent_id)
+        self.conn.commit()
+        self.record_event(
+            "card",
+            actor,
+            callee_id=agent_id,
+            summary="refresh {0}".format(agent_id),
+            detail={"source_url": fetched["source_url"]},
+        )
+        return self.get_detail(agent_id)
+
+    def _touch_card_refreshed_at(self, agent_id: str) -> None:
+        now = utcnow()
+        self.conn.execute(
+            "UPDATE agents SET card_refreshed_at=?, updated_at=? WHERE agent_id=?",
+            (now, now, agent_id),
+        )
+        self.conn.commit()
+
+    def sweep_once(self, actor: str = "system:sweep", transport=None) -> Dict[str, Any]:
+        rows = self.conn.execute(
+            "SELECT agent_id FROM agents WHERE lifecycle = 'registered' ORDER BY agent_id"
+        ).fetchall()
+        probed = 0
+        refreshed = 0
+        errors = 0
+        for row in rows:
+            agent_id = row["agent_id"]
+            try:
+                self.probe_agent(agent_id, actor, transport=transport)
+                probed += 1
+            except StoreError:
+                errors += 1
+                continue
+            current = self.get_row(agent_id)
+            if not current:
+                continue
+            source = current["card_source_url"] if "card_source_url" in current.keys() else None
+            if not source:
+                continue
+            last_refresh = (
+                current["card_refreshed_at"] if "card_refreshed_at" in current.keys() else None
+            )
+            if self._is_fresh(last_refresh, self.settings.refresh_interval_s):
+                continue
+            try:
+                self.refresh_from_source(agent_id, actor, transport=transport)
+                refreshed += 1
+            except StoreError:
+                errors += 1
+                self._touch_card_refreshed_at(agent_id)
+        summary = {
+            "probed": probed,
+            "refreshed": refreshed,
+            "errors": errors,
+            "at": utcnow(),
+        }
+        self.last_sweep = summary
+        return summary
+
+    def update_card(
+        self,
+        agent_id: str,
+        card: dict,
+        actor: str,
+        summary: str = "card updated",
+        allow_promote: bool = False,
+    ) -> Dict[str, Any]:
         row = self.get_row(agent_id)
         if not row:
             raise StoreError(404, "agent not found")
@@ -311,8 +581,21 @@ class Store:
         incoming_id = extract_agent_id(card) if isinstance(card, dict) else ""
         if incoming_id and incoming_id != agent_id:
             raise StoreError(400, "x-sunny.agent_id cannot change")
+        old_discovery = policy.discovery_of(
+            json.loads(row["card_json"]),
+            row["discovery"] if "discovery" in row.keys() else None,
+        )
+        old_status = row["approval_status"] if "approval_status" in row.keys() else None
+        old_version = row["version"]
         prepared = self._prepare_card(card, row["lifecycle"])
         prepared["x-sunny"]["agent_id"] = agent_id
+        new_discovery = policy.discovery_of(prepared)
+        if (
+            not allow_promote
+            and old_discovery == "approval_required"
+            and new_discovery == "registered_peers"
+        ):
+            raise StoreError(403, "cannot self-approve; an admin must approve this card")
         now = utcnow()
         self.conn.execute(
             """
@@ -325,17 +608,125 @@ class Store:
                 prepared["description"],
                 prepared["version"],
                 json.dumps(prepared, ensure_ascii=False),
-                policy.discovery_of(prepared),
+                new_discovery,
                 now,
                 agent_id,
             ),
         )
+        next_status = policy.next_approval_status(old_discovery, old_status, new_discovery, allow_promote)
+        if next_status == policy.APPROVAL_PENDING:
+            self._write_approval(agent_id, next_status)
+        elif next_status == policy.APPROVAL_APPROVED:
+            self._write_approval(agent_id, next_status, decided_by=actor, decided_at=now)
+        else:
+            self._write_approval(agent_id, next_status)
         self._replace_skills(agent_id, prepared)
-        self._add_revision(agent_id, "update", actor, row["enrollment_source"], prepared, "card updated")
+        self._add_revision(agent_id, "update", actor, row["enrollment_source"], prepared, summary)
+        self._refresh_fts(agent_id)
+        if (prepared.get("version") or "") != (old_version or ""):
+            self._record_card_change(agent_id, old_version or "", prepared.get("version") or "", actor)
         self.conn.commit()
         return self.get_detail(agent_id)
 
-    def patch_card(self, agent_id: str, patch: Dict[str, Any], actor: str) -> Dict[str, Any]:
+    def approve_agent(self, agent_id: str, actor: str) -> Dict[str, Any]:
+        row = self.get_row(agent_id)
+        if not row:
+            raise StoreError(404, "agent not found")
+        if row["lifecycle"] == "disabled":
+            raise StoreError(409, "enable the agent before approving")
+        card = json.loads(row["card_json"])
+        discovery = policy.discovery_of(card, row["discovery"] if "discovery" in row.keys() else None)
+        status = policy.approval_status_of(
+            row["approval_status"] if "approval_status" in row.keys() else None,
+            discovery,
+        )
+        if not policy.is_awaiting_approval(discovery, status):
+            raise StoreError(409, "agent is not awaiting approval")
+        card.setdefault("x-sunny", {})["discovery"] = policy.PEER_VISIBLE_DISCOVERY
+        now = utcnow()
+        self.conn.execute(
+            """
+            UPDATE agents SET card_json=?, discovery=?, updated_at=? WHERE agent_id=?
+            """,
+            (json.dumps(card, ensure_ascii=False), policy.PEER_VISIBLE_DISCOVERY, now, agent_id),
+        )
+        self._write_approval(agent_id, policy.APPROVAL_APPROVED, decided_by=actor, decided_at=now)
+        self._add_revision(agent_id, "approve", actor, row["enrollment_source"], card, "card approved")
+        self.conn.commit()
+        self.record_event(
+            "card",
+            actor,
+            callee_id=agent_id,
+            summary="approve {0}".format(agent_id),
+            detail={"discovery": policy.PEER_VISIBLE_DISCOVERY},
+        )
+        return self.get_detail(agent_id)
+
+    def reject_agent(self, agent_id: str, actor: str, reason: str) -> Dict[str, Any]:
+        note = (reason or "").strip()
+        if not note:
+            raise StoreError(400, "reject reason is required")
+        if len(note) > 500:
+            raise StoreError(400, "reject reason is too long")
+        row = self.get_row(agent_id)
+        if not row:
+            raise StoreError(404, "agent not found")
+        if row["lifecycle"] == "disabled":
+            raise StoreError(409, "enable the agent before rejecting")
+        card = json.loads(row["card_json"])
+        discovery = policy.discovery_of(card, row["discovery"] if "discovery" in row.keys() else None)
+        status = policy.approval_status_of(
+            row["approval_status"] if "approval_status" in row.keys() else None,
+            discovery,
+        )
+        if status == policy.APPROVAL_APPROVED or discovery == policy.PEER_VISIBLE_DISCOVERY:
+            raise StoreError(409, "approved agent is not awaiting rejection")
+        if discovery != "approval_required" and status != policy.APPROVAL_PENDING:
+            raise StoreError(409, "agent is not awaiting approval")
+        card.setdefault("x-sunny", {})["discovery"] = "approval_required"
+        now = utcnow()
+        self.conn.execute(
+            """
+            UPDATE agents SET card_json=?, discovery=?, updated_at=? WHERE agent_id=?
+            """,
+            (json.dumps(card, ensure_ascii=False), "approval_required", now, agent_id),
+        )
+        self._write_approval(
+            agent_id,
+            policy.APPROVAL_REJECTED,
+            reason=note,
+            decided_by=actor,
+            decided_at=now,
+        )
+        self._add_revision(agent_id, "reject", actor, row["enrollment_source"], card, "card rejected")
+        self.conn.commit()
+        self.record_event(
+            "card",
+            actor,
+            status="denied",
+            callee_id=agent_id,
+            summary="reject {0}".format(agent_id),
+            detail={"reason": note},
+        )
+        return self.get_detail(agent_id)
+
+    def list_approvals(self, status: str = policy.APPROVAL_PENDING) -> List[Dict[str, Any]]:
+        if status not in {policy.APPROVAL_PENDING, policy.APPROVAL_REJECTED, policy.APPROVAL_APPROVED}:
+            raise StoreError(400, "approval status must be pending, rejected, or approved")
+        items = []
+        for row in self.conn.execute("SELECT * FROM agents ORDER BY updated_at DESC"):
+            summary = self._row_to_summary(row)
+            if summary["approval_status"] == status:
+                items.append(summary)
+        return items
+
+    def patch_card(
+        self,
+        agent_id: str,
+        patch: Dict[str, Any],
+        actor: str,
+        allow_promote: bool = False,
+    ) -> Dict[str, Any]:
         row = self.get_row(agent_id)
         if not row:
             raise StoreError(404, "agent not found")
@@ -379,7 +770,7 @@ class Store:
                 skills.append(skill)
                 existing_ids.add(skill["id"])
         card["skills"] = skills
-        return self.update_card(agent_id, card, actor)
+        return self.update_card(agent_id, card, actor, allow_promote=allow_promote)
 
     def delete_agent(self, agent_id: str, actor: str) -> Dict[str, Any]:
         row = self.get_row(agent_id)
@@ -391,15 +782,61 @@ class Store:
         self.conn.execute("DELETE FROM tickets WHERE caller_id = ? OR callee_id = ?", (agent_id, agent_id))
         self.conn.execute("DELETE FROM invocations WHERE caller_id = ? OR callee_id = ?", (agent_id, agent_id))
         self.conn.execute("DELETE FROM agents WHERE agent_id = ?", (agent_id,))
+        fts.delete(self.conn, agent_id)
         self.conn.commit()
         return {"ok": True, "deleted": True, "agent_id": agent_id, "name": summary["name"]}
+
+    def _record_card_change(self, agent_id: str, old_version: str, new_version: str, actor: str) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO card_changes(agent_id, old_version, new_version, actor, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (agent_id, old_version, new_version, actor, utcnow()),
+        )
+
+    def list_card_changes(
+        self,
+        since_id: int = 0,
+        agent_id: Optional[str] = None,
+        peer_visible_only: bool = False,
+        limit: int = 100,
+    ) -> Dict[str, Any]:
+        if since_id < 0:
+            since_id = 0
+        if limit < 1:
+            limit = 1
+        if limit > 200:
+            limit = 200
+        sql = """
+            SELECT c.id, c.agent_id, c.old_version, c.new_version, c.actor, c.created_at
+            FROM card_changes c
+            JOIN agents a ON a.agent_id = c.agent_id
+            WHERE c.id > ?
+        """
+        args: List[Any] = [since_id]
+        if agent_id:
+            sql += " AND c.agent_id = ?"
+            args.append(agent_id)
+        if peer_visible_only:
+            sql += (
+                " AND a.lifecycle IN ('registered', 'deprecated')"
+                " AND COALESCE(a.discovery, 'registered_peers') = 'registered_peers'"
+            )
+        sql += " ORDER BY c.id ASC LIMIT ?"
+        args.append(limit)
+        items = [dict(row) for row in self.conn.execute(sql, args)]
+        next_since = items[-1]["id"] if items else since_id
+        return {"items": items, "count": len(items), "since": since_id, "next_since": next_since}
 
     def set_lifecycle(self, agent_id: str, lifecycle: str, actor: str) -> Dict[str, Any]:
         row = self.get_row(agent_id)
         if not row:
             raise StoreError(404, "agent not found")
-        if lifecycle not in {"registered", "disabled"}:
-            raise StoreError(400, "lifecycle must be registered or disabled")
+        if lifecycle not in policy.KNOWN_LIFECYCLES:
+            raise StoreError(400, "lifecycle must be registered, deprecated, or disabled")
+        if lifecycle == policy.LIFECYCLE_DEPRECATED and row["lifecycle"] == policy.LIFECYCLE_DISABLED:
+            raise StoreError(409, "enable the agent before deprecating")
         card = json.loads(row["card_json"])
         card["x-sunny"]["lifecycle"] = lifecycle
         now = utcnow()
@@ -407,7 +844,12 @@ class Store:
             "UPDATE agents SET lifecycle=?, card_json=?, updated_at=? WHERE agent_id=?",
             (lifecycle, json.dumps(card, ensure_ascii=False), now, agent_id),
         )
-        action = "disable" if lifecycle == "disabled" else "enable"
+        if lifecycle == policy.LIFECYCLE_DISABLED:
+            action = "disable"
+        elif lifecycle == policy.LIFECYCLE_DEPRECATED:
+            action = "deprecate"
+        else:
+            action = "enable"
         self._add_revision(agent_id, action, actor, row["enrollment_source"], card, action)
         self.conn.commit()
         return self.get_detail(agent_id)
@@ -425,6 +867,55 @@ class Store:
         )
         self._add_revision(agent_id, "heartbeat", actor, row["enrollment_source"], None, "heartbeat")
         self.conn.commit()
+        return self.get_detail(agent_id)
+
+    def probe_agent(self, agent_id: str, actor: str, transport=None) -> Dict[str, Any]:
+        row = self.get_row(agent_id)
+        if not row:
+            raise StoreError(404, "agent not found")
+        if row["lifecycle"] == "disabled":
+            raise StoreError(409, "disabled agent cannot be probed")
+        card = json.loads(row["card_json"])
+        result = probe.probe_card(
+            card,
+            self.settings.probe_timeout_s,
+            transport=self._http_transport(transport),
+        )
+        now = utcnow()
+        category = result.get("category") or probe.classify_probe(result)
+        self.conn.execute(
+            """
+            UPDATE agents
+            SET probe_ok=?, probe_status_code=?, probe_url=?, probe_error=?,
+                probe_category=?, probe_checked_at=?, updated_at=?
+            WHERE agent_id=?
+            """,
+            (
+                1 if result["ok"] else 0,
+                result.get("status_code"),
+                result.get("url"),
+                result.get("error"),
+                category,
+                now,
+                now,
+                agent_id,
+            ),
+        )
+        self.conn.commit()
+        self.record_event(
+            "card",
+            actor,
+            status="ok" if result["ok"] else "error",
+            callee_id=agent_id,
+            summary="probe {0} {1}".format(agent_id, category if not result["ok"] else "ok"),
+            detail={
+                "ok": result["ok"],
+                "url": result.get("url"),
+                "status_code": result.get("status_code"),
+                "error": result.get("error"),
+                "category": category,
+            },
+        )
         return self.get_detail(agent_id)
 
     def issue_agent_key(self, agent_id: str, actor: str) -> Dict[str, Any]:
@@ -459,6 +950,8 @@ class Store:
         workspace: Optional[str] = None,
         enrollment_source: Optional[str] = None,
         runtime_status: Optional[str] = None,
+        discovery: Optional[str] = None,
+        approval_status: Optional[str] = None,
         peer_visible_only: bool = False,
         include_owned_by: Optional[str] = None,
         include_agent_id: Optional[str] = None,
@@ -467,7 +960,7 @@ class Store:
         clauses = []
         args: List[Any] = []
         if only_registered:
-            clauses.append("lifecycle = 'registered'")
+            clauses.append("lifecycle IN ('registered', 'deprecated')")
         elif not include_disabled:
             clauses.append("lifecycle != 'disabled'")
         if workspace:
@@ -476,10 +969,22 @@ class Store:
         if enrollment_source:
             clauses.append("enrollment_source = ?")
             args.append(enrollment_source)
+        if discovery:
+            clauses.append("COALESCE(discovery, 'registered_peers') = ?")
+            args.append(discovery)
+        if approval_status:
+            clauses.append("COALESCE(approval_status, 'none') = ?")
+            args.append(approval_status)
         if q:
-            like = "%{0}%".format(q)
-            clauses.append("(agent_id LIKE ? OR name LIKE ? OR description LIKE ?)")
-            args.extend([like, like, like])
+            clause, q_args = self._q_clause(
+                q,
+                "(agent_id LIKE ? OR name LIKE ? OR description LIKE ?)",
+                3,
+                "agent_id",
+            )
+            if clause:
+                clauses.append(clause)
+                args.extend(q_args)
         if peer_visible_only:
             visible = ["COALESCE(discovery, 'registered_peers') = 'registered_peers'"]
             if include_owned_by:
@@ -506,11 +1011,12 @@ class Store:
         tag: Optional[str] = None,
         workspace: Optional[str] = None,
         q: Optional[str] = None,
+        only_alive: bool = True,
     ) -> List[Dict[str, Any]]:
         sql = """
             SELECT DISTINCT a.* FROM agents a
             JOIN agent_skills s ON s.agent_id = a.agent_id
-            WHERE a.lifecycle = 'registered'
+            WHERE a.lifecycle IN ('registered', 'deprecated')
               AND COALESCE(a.discovery, 'registered_peers') = 'registered_peers'
               AND s.side_effects = 'read'
               AND s.data_class IN ('public', 'internal')
@@ -526,11 +1032,22 @@ class Store:
             sql += " AND a.workspace = ?"
             args.append(workspace)
         if q:
-            like = "%{0}%".format(q)
-            sql += " AND (a.agent_id LIKE ? OR a.name LIKE ? OR s.skill_id LIKE ? OR s.name LIKE ?)"
-            args.extend([like, like, like, like])
+            clause, q_args = self._q_clause(
+                q,
+                "(a.agent_id LIKE ? OR a.name LIKE ? OR a.description LIKE ? OR s.skill_id LIKE ? OR s.name LIKE ?)",
+                5,
+                "a.agent_id",
+            )
+            if clause:
+                sql += " AND " + clause
+                args.extend(q_args)
         sql += " ORDER BY a.name"
-        return [self._row_to_summary(row) for row in self.conn.execute(sql, args)]
+        items = []
+        for row in self.conn.execute(sql, args):
+            if only_alive and self.runtime_status(row) != "online":
+                continue
+            items.append(self._row_to_summary(row))
+        return items
 
     def revisions(self, agent_id: str) -> List[Dict[str, Any]]:
         if not self.get_row(agent_id):
