@@ -10,8 +10,11 @@ from .security import ADMIN_USER_ID, DEVELOPER_USER_ID
 from .store import Store
 
 
-def _load(name: str) -> dict:
-    return json.loads((ROOT / "cards" / name).read_text(encoding="utf-8"))
+def _load(name: str):
+    path = ROOT / "cards" / name
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def seed_users(store: Store) -> None:
@@ -25,15 +28,19 @@ def seed_if_empty(store: Store) -> None:
     seed_users(store)
     if store.count_agents() > 0:
         return
+    aidata_card = _load("aidata.hermes.sample.json")
+    inspector_card = _load("lab.inspector.sample.json")
+    if not aidata_card or not inspector_card:
+        return
     aidata = store.register(
-        _load("aidata.hermes.sample.json"),
+        aidata_card,
         "hub",
         "admin:admin",
         lifecycle="registered",
         created_by=ADMIN_USER_ID,
     )
     inspector = store.register(
-        _load("lab.inspector.sample.json"),
+        inspector_card,
         "self",
         "agent:self",
         lifecycle="registered",
