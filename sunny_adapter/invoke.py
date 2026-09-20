@@ -8,7 +8,7 @@ import httpx
 
 from .config import AdapterSettings
 from .enroll import load_card
-from .mapping import load_mapping, route_for
+from .mapping import MappingError, load_mapping, route_for
 from .proxy import forward
 from .skills import dispatch
 from .slots import validate_slots

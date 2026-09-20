@@ -22,7 +22,13 @@ def main(argv=None) -> int:
         help="caller agent_id when using an admin token",
     )
     args = parser.parse_args(argv)
-    slots = json.loads(args.slots)
+    try:
+        slots = json.loads(args.slots)
+        if not isinstance(slots, dict):
+            raise ValueError("slots must be a JSON object")
+    except (ValueError, TypeError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
     client = SunnyClient(
         args.registry,
         agent_key=os.environ.get("SUNNY_AGENT_KEY") or None,

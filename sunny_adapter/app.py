@@ -7,8 +7,10 @@ from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel
+
+from sunny_registry.a2a_export import CACHE_PUBLIC, cached_json, card_etag
 
 from .config import AdapterSettings
 from .enroll import enroll, load_card
@@ -115,9 +117,21 @@ def create_adapter_app(
                 payload["downstream"] = probe_downstream(hb, upstream)
         return payload
 
+    def _sunny_card(request: Request):
+        card = load_card(settings)
+        return cached_json(request, card, card_etag(card), CACHE_PUBLIC)
+
+    @app.get("/.well-known/agent-card.json")
+    def well_known_agent_card(request: Request):
+        return _sunny_card(request)
+
+    @app.get("/.well-known/agent.json")
+    def well_known_agent_json(request: Request):
+        return _sunny_card(request)
+
     @app.get("/sunny/v1/card")
-    def public_card() -> Dict[str, Any]:
-        return load_card(settings)
+    def public_card(request: Request):
+        return _sunny_card(request)
 
     @app.post("/sunny/invoke/{skill_id}")
     def invoke(
