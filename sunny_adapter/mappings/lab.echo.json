@@ -1,0 +1,29 @@
+{
+  "agent_id": "lab.echo",
+  "card": "cards/lab.echo.sample.json",
+  "routes": [
+    {
+      "skill_id": "echo.ping",
+      "handler": "http",
+      "method": "POST",
+      "url": "${ECHO_URL}/v1/echo",
+      "map": {
+        "q": "$.slots.query",
+        "trace_id": "$.slots.trace_id"
+      }
+    },
+    {
+      "skill_id": "echo.secret",
+      "handler": "http",
+      "method": "POST",
+      "url": "${ECHO_URL}/v1/echo",
+      "map": {
+        "q": "$.slots.query",
+        "trace_id": "$.slots.trace_id"
+      }
+    }
+  ],
+  "heartbeat": {
+    "url": "${ECHO_URL}/health"
+  }
+}
