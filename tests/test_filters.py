@@ -84,6 +84,46 @@ def test_list_runtime_status_online_unknown_disabled(client):
     assert [item["agent_id"] for item in disabled.json()["items"]] == ["lab.inspector"]
 
 
+def _clone(agent_id: str, name: str, **sunny) -> dict:
+    card = json.loads(json.dumps(_card("lab.inspector.sample.json")))
+    card["name"] = name
+    card["description"] = name + " 的说明"
+    card["x-sunny"]["agent_id"] = agent_id
+    card["x-sunny"].update(sunny)
+    return card
+
+
+def test_list_filters_approval_status(client):
+    pending = _admin(
+        client,
+        "post",
+        "/api/v1/agents",
+        json={"card": _clone("lab.pending", "待审批卡", discovery="approval_required"), "enrollment_source": "hub"},
+    )
+    assert pending.status_code == 200, pending.text
+    approved = _admin(
+        client,
+        "post",
+        "/api/v1/agents",
+        json={"card": _clone("lab.approved", "已通过卡", discovery="approval_required"), "enrollment_source": "hub"},
+    )
+    assert approved.status_code == 200, approved.text
+    assert _admin(client, "post", "/api/v1/agents/lab.approved/approve").status_code == 200
+    _admin(
+        client,
+        "post",
+        "/api/v1/agents",
+        json={"card": _card("aidata.hermes.sample.json"), "enrollment_source": "hub"},
+    )
+
+    waiting = _admin(client, "get", "/api/v1/agents", params={"approval_status": "pending"})
+    assert [item["agent_id"] for item in waiting.json()["items"]] == ["lab.pending"]
+    passed = _admin(client, "get", "/api/v1/agents", params={"approval_status": "approved"})
+    assert [item["agent_id"] for item in passed.json()["items"]] == ["lab.approved"]
+    rejected = _admin(client, "get", "/api/v1/agents", params={"approval_status": "rejected"})
+    assert rejected.json()["items"] == []
+
+
 def test_search_filters_workspace_and_q(client):
     _seed_pair(client)
     assert _admin(client, "post", "/api/v1/agents/lab.inspector/heartbeat").status_code == 200

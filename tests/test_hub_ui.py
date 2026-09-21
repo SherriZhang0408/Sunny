@@ -29,7 +29,8 @@ def test_hub_index_and_spa_fallback(client):
     assert "text/html" in index.headers.get("content-type", "")
     html = index.text
     assert 'lang="zh-CN"' in html
-    assert "SUNNY Hub" in html
+    assert "SUNNY · Agent Hub" in html
+    assert "<title>SUNNY · Agent Hub</title>" in html
     assert 'id="global-search"' in html
     assert 'href="#/explore"' in html
     assert 'href="#/publish"' in html
@@ -38,7 +39,7 @@ def test_hub_index_and_spa_fallback(client):
 
     spa = client.get("/agents/aidata.hermes")
     assert spa.status_code == 200
-    assert "SUNNY Hub" in spa.text
+    assert "SUNNY · Agent Hub" in spa.text
 
     missing_api = client.get("/api/v1/not-a-route")
     assert missing_api.status_code == 404
@@ -80,6 +81,8 @@ def test_hub_control_taxonomy_and_colors():
     assert "要用别的智能体，先拿到它的名片" in js
     assert 'filter-label">来源' not in js
     assert "待审批" in js
+    assert "已通过" in js
+    assert '["approved", "已通过"]' in js
     assert "需审批后可见" in js
     assert 'id: "btn-approve"' in js
     assert 'id: "btn-deprecate"' in js
@@ -113,6 +116,9 @@ def test_hub_nav_permissions_wired():
     assert 'can("view_activity")' in js or "view_activity" in js
     assert 'can("manage_users")' in js or "manage_users" in js
     assert "loginView" in js
+    assert "function goLogin" in js
+    assert 'location.hash = "#/login"' in js
+    assert "#/login" in js
     assert 'class="login-page"' in js
     assert 'class="login-avatar"' in js
     assert 'class="login-visual"' in js
@@ -132,7 +138,7 @@ def test_hub_nav_permissions_wired():
     assert "<h1>智能体 · 名片</h1>" in js
     assert "像人类交换名片" in js
     assert 'class="login-brand-name">SUNNY<' not in js
-    assert 'class="login-foot">SUNNY Agent Hub<' in js
+    assert 'class="login-foot">SUNNY · Agent Hub<' in js
     assert 'id="agent-card-btn"' in js
     assert 'id="login-dialog"' in js
     assert 'id="login-bits"' in js
@@ -145,8 +151,25 @@ def test_hub_nav_permissions_wired():
     assert ".login-page" in (WEB / "assets" / "app.css").read_text(encoding="utf-8")
     assert "exploreView" in js
     assert "publishView" in js
+    assert "function publishPages" in js
+    assert "function applyPublishTab" in js
+    assert "function bindPublishPager" in js
+    assert 'id="publish-pager"' in js
+    assert 'id="publish-track"' in js
+    assert 'id="publish-shell"' in js
+    assert "#/publish/" in js
+    assert 'id: "hub"' in js
+    assert 'id: "pull"' in js
+    assert 'id: "join"' in js
+    assert 'id: "self"' not in js
+    assert "data-tab=\"" in js
+    assert "点上方分类" not in js
+    assert "底部圆点" not in js
+    assert "左右滑动" not in js
     assert "从 URL 拉取名片" in js
     assert "/api/v1/agents/pull" in js
+    assert '<select id="src">' not in js
+    assert "<label>登记方式</label>" not in js
     assert "完整名片" in js
     assert "/extended" in js
     assert "公开名片" in js
@@ -155,6 +178,12 @@ def test_hub_nav_permissions_wired():
     assert "刷新名片" in js
     assert "usersView" in js
     assert 'data-nav="settings"' in (WEB / "index.html").read_text(encoding="utf-8")
+    assert ">账号管理</a>" in (WEB / "index.html").read_text(encoding="utf-8")
+    assert ">系统设置</a>" in (WEB / "index.html").read_text(encoding="utf-8")
+    assert ">账号</a>" not in (WEB / "index.html").read_text(encoding="utf-8")
+    assert ">设置</a>" not in (WEB / "index.html").read_text(encoding="utf-8")
+    assert '<h1>账号管理</h1>' in js
+    assert '<h1>系统设置</h1>' in js
     assert "settingsView" in js
     assert "sunny.hub.prefs" in js
     assert 'id: "light"' in js
@@ -166,6 +195,125 @@ def test_hub_nav_permissions_wired():
     assert "主题设置" in js
     assert "界面字体" in js
     assert "密度" in js
+    assert "开发者不能查看调用关系。" in js
+    assert "开发者不能查看全局活动动态。" in js
+    assert "只有管理员可以管理账号。" in js
+    assert ".badge.approved" in (WEB / "assets" / "app.css").read_text(encoding="utf-8")
+
+
+def test_explore_and_activity_logic_executes_from_app_js(tmp_path):
+    import json
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        pytest.fail("需要本机 node 才能执行浏览/活动页逻辑测试")
+    src = (WEB / "assets" / "app.js").read_text(encoding="utf-8")
+
+    def extract_fn(name: str) -> str:
+        token = "function " + name + "("
+        start = src.find(token)
+        if start < 0:
+            raise AssertionError("app.js 缺少 function " + name)
+        brace = src.find("{", start)
+        depth = 0
+        in_str = None
+        escape = False
+        for idx in range(brace, len(src)):
+            ch = src[idx]
+            if in_str:
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == in_str:
+                    in_str = None
+                continue
+            if ch in ("'", '"'):
+                in_str = ch
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return src[start : idx + 1]
+        raise AssertionError("function " + name + " 花括号不配对")
+
+    def extract_const(name: str) -> str:
+        token = "const " + name + " ="
+        start = src.find(token)
+        if start < 0:
+            raise AssertionError("app.js 缺少 const " + name)
+        brace = src.find("{", start)
+        depth = 0
+        in_str = None
+        escape = False
+        for idx in range(brace, len(src)):
+            ch = src[idx]
+            if in_str:
+                if escape:
+                    escape = False
+                elif ch == "\\":
+                    escape = True
+                elif ch == in_str:
+                    in_str = None
+                continue
+            if ch in ("'", '"'):
+                in_str = ch
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return src[start : idx + 1]
+        raise AssertionError("const " + name + " 花括号不配对")
+
+    script = "\n".join(
+        [
+            extract_const("CHIP_LABELS"),
+            extract_fn("chipLabel"),
+            extract_fn("approvalSelect"),
+            extract_fn("activityHash"),
+            extract_fn("sourceSeg"),
+            r"""
+function fail(msg) { throw new Error(msg); }
+function eq(actual, expected, msg) {
+  const left = JSON.stringify(actual);
+  const right = JSON.stringify(expected);
+  if (left !== right) fail((msg || "assert") + " expected " + right + " got " + left);
+}
+const options = approvalSelect("approved");
+if (options.indexOf('value="approved"') < 0) fail("approved value");
+if (options.indexOf("已通过") < 0) fail("approved label");
+if (options.indexOf("全部审批") < 0) fail("all approval");
+if (options.indexOf("待审批") < 0) fail("pending");
+if (options.indexOf("已拒绝") < 0) fail("rejected");
+if (options.indexOf('value="approved" selected') < 0) fail("approved selected");
+eq(chipLabel("source", "hub"), "管理台填入", "hub source");
+eq(chipLabel("source", "self"), "主动注册", "self source");
+eq(chipLabel("approval", "approved"), "已通过", "approved chip");
+eq(chipLabel("approval", "pending"), "待审批", "pending chip");
+eq(activityHash("", "", ""), "#/activity", "plain activity");
+eq(activityHash("ticket", "hub-qa-1", ""), "#/activity?kind=ticket&trace_id=hub-qa-1", "trace hash");
+eq(activityHash("search", "", "hermes"), "#/activity?kind=search&q=hermes", "search hash");
+const seg = sourceSeg("hub");
+if (seg.indexOf("全部来源") < 0) fail("all sources");
+if (seg.indexOf("管理台填入") < 0) fail("hub label");
+if (seg.indexOf("主动注册") < 0) fail("self label");
+if (seg.indexOf('data-source="hub"') < 0) fail("hub data");
+console.log(JSON.stringify({ ok: true }));
+""",
+        ]
+    )
+    path = tmp_path / "hub_explore_logic.js"
+    path.write_text(script, encoding="utf-8")
+    proc = subprocess.run([node, str(path)], capture_output=True, text=True, encoding="utf-8")
+    if proc.returncode != 0:
+        pytest.fail(proc.stderr or proc.stdout or "node 浏览/活动页逻辑测试失败")
+    assert json.loads(proc.stdout)["ok"] is True
 
 
 def test_hub_theme_tokens():
@@ -180,3 +328,8 @@ def test_hub_theme_tokens():
     assert "sunny.hub.prefs" in html
     assert ".theme-card" in css
     assert ".settings-nav" in css
+    assert ".publish-pager" in css
+    assert ".publish-track" in css
+    assert ".publish-page" in css
+    assert ".publish-dots" not in css
+    assert ".publish-hint" not in css
