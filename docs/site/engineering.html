@@ -6,28 +6,31 @@
   <title>工程说明 · SUNNY · Agent Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/site.css" />
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="index.html">SUNNY<span>_</span> Agent Hub</a>
+    <a class="brand" href="index.html">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23fff'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%230b1f33' stroke-width='1.8'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%2300e676'/%3E%3C/svg%3E" alt="" width="32" height="32" />
+      <span class="word">
+        <small>文档站</small>
+        <b>SUNNY<span class="cursor">_</span> Agent Hub</b>
+      </span>
+    </a>
     <nav aria-label="文档导航">
-      <a href="index.html">门户</a>
+      <a href="index.html">文档门户</a>
+      <a href="briefing.html">项目介绍</a>
       <a href="engineering.html" aria-current="page">工程说明</a>
-      <a href="api.html">API</a>
-      <a href="briefing.html">对外汇报</a>
+      <a href="api.html">API 参考</a>
     </nav>
   </header>
-  <main class="wrap">
-    <section class="hero">
-      <h1>工程说明</h1>
-      <p>每个可运行模块：填什么参数、怎么起、怎样算成功。密钥只写变量名和本机默认开发值，不要写进名片或 Git。</p>
-    </section>
-
-    <nav class="toc">
+  <main class="wrap doc">
+    <nav class="toc" aria-label="本页目录">
       <strong>目录</strong>
       <ol>
+        <li><a href="#map">模块集成</a></li>
+        <li><a href="#briefing">定位与边界</a></li>
         <li><a href="#order">启动顺序与端口</a></li>
         <li><a href="#registry">Registry + Hub</a></li>
         <li><a href="#adapter">Adapter（Hermes）</a></li>
@@ -37,6 +40,157 @@
         <li><a href="#mcp">mcp_stdio</a></li>
       </ol>
     </nav>
+    <div class="doc-body">
+    <section class="hero solo">
+      <div>
+        <p class="kicker">开发与运维手册</p>
+        <h1>模块、启动与成功判定</h1>
+        <p>按真实进程说明依赖、参数和验证方式。项目价值与角色收益请先看<a href="briefing.html">项目介绍</a>。</p>
+      </div>
+    </section>
+
+    <article class="module" id="map">
+      <h2>模块怎么接在一起</h2>
+      <p class="lead">控制面只负责发现、出票、心跳。业务调用出票后<strong>直打 sidecar</strong>，Registry 不转发。点节点可跳到对应说明。</p>
+      <div class="arch" role="img" aria-label="SUNNY 模块集成：Hub、Client、MCP 走 Registry；sidecar 直打业务；Echo 与 AIDATA 在 sidecar 下游。">
+        <div class="arch-legend">
+          <span><i class="swatch ctrl"></i>控制面</span>
+          <span><i class="swatch data"></i>调用链 / sidecar</span>
+          <span><i class="swatch opt"></i>下游（可选或第二户）</span>
+        </div>
+        <div class="arch-row three">
+          <a class="node tool" href="#client">
+            <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M7 20h10M8 9l2 2-2 2M12 13h4"/></svg></span>
+            <span><strong>sunny_client</strong><small>搜卡 → 出票 → 直打 sidecar</small><span class="port">CLI 一次性</span></span>
+          </a>
+          <a class="node tool" href="#mcp">
+            <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="7" r="3"/><circle cx="18" cy="17" r="3"/><path d="M9 12h6M15.2 8.6l-4.4 2.8M15.2 15.4l-4.4-2.8"/></svg></span>
+            <span><strong>MCP stdio</strong><small>只发现，不签发票、不代调</small><span class="port">转到 POST /mcp</span></span>
+          </a>
+          <a class="node tool" href="#registry">
+            <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 13h3M8 16h5"/></svg></span>
+            <span><strong>Hub 管理台</strong><small>与 Registry 同进程静态页</small><span class="port">浏览器 :8088</span></span>
+          </a>
+        </div>
+        <div class="arch-flow"><em>↓ 登录 · 搜卡 · 出票 · 心跳 · 验票</em></div>
+        <div class="arch-row one">
+          <a class="node ctrl" href="#registry">
+            <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/></svg></span>
+            <span><strong>Registry</strong><small>策展目录、策略门闩、SQLite。不在业务数据路径上。</small><span class="port">:8088 · python3 -m sunny_registry</span></span>
+          </a>
+        </div>
+        <div class="arch-flow"><em>↓ enroll / 心跳 / verify　→ 出票后直打 invoke，不经 Registry</em></div>
+        <div class="arch-row two">
+          <a class="node data" href="#adapter">
+            <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 7h2M10 17h4M9 12h6"/></svg></span>
+            <span><strong>Adapter Hermes</strong><small>aidata.hermes sidecar，本地或映射执行</small><span class="port">:8091 · /sunny/invoke/…</span></span>
+          </a>
+          <a class="node data" href="#echo">
+            <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4v2M12 18v2M5 7l1.5 1.5M17.5 15.5 19 17M4 12h2M18 12h2M5 17l1.5-1.5M17.5 8.5 19 7"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <span><strong>Adapter Echo</strong><small>lab.echo sidecar，验票后转 HTTP</small><span class="port">:8093 · 换一套 env 再起</span></span>
+          </a>
+        </div>
+        <div class="arch-flow"><em>↓ 映射 / 本地 handler</em></div>
+        <div class="arch-row two">
+          <a class="node opt" href="#adapter">
+            <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v6c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 13v4c0 1.7 3.1 3 7 3s7-1.3 7-3v-4"/></svg></span>
+            <span><strong>AIDATA 包装器</strong><small>可选。无则 volume 仍算调通（ready=false）</small><span class="port">AIDATA_ROOT</span></span>
+          </a>
+          <a class="node opt" href="#echo">
+            <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h4l2-6 4 12 2-6h4"/></svg></span>
+            <span><strong>Echo HTTP</strong><small>回声进程，不验票；由 sidecar 转发</small><span class="port">:8092 · python3 -m sunny_echo</span></span>
+          </a>
+        </div>
+      </div>
+      <p class="muted">离线工具 <a href="#validate">validate_card.py</a> 不进这条运行链，只校验名片 JSON。</p>
+    </article>
+
+    <article class="module" id="briefing">
+      <h2>0. 定位与工程边界</h2>
+      <p class="lead">策展型 Agent 注册中心。不替代各智能体的决策，只让它们按名片互相发现、按策略互相调用。名字来自电影 <em>I, Robot</em> 里的机器人桑尼。本机 / 局域网已验证，不是公网市场。</p>
+
+      <h3>要解决什么</h3>
+      <ul>
+        <li>每次对接都是点对点：基址、鉴权、槽位写死在调用方。</li>
+        <li>对方一换接口，调用方全改；新 Agent 没有标准「怎么介绍自己」。</li>
+        <li>能力在对方脑子里，不在目录里。</li>
+        <li>同事不会为了接入把业务重写成完整 A2A Server。</li>
+      </ul>
+
+      <h3>只做控制面，不做运行时</h3>
+      <p>企业内策展注册中心 + 薄适配器。发现谁在、会什么、谁看得见、版本与心跳。不造对话引擎，不当调用网关，不逼业务 Agent 改内核。</p>
+
+      <h3>发现 ≠ 访问</h3>
+      <div class="brief-grid">
+        <div class="chip">
+          <strong>搜到名片</strong>
+          目录、公开卡、MCP 工具。知道对方有什么技能、接口在哪。
+        </div>
+        <div class="chip">
+          <strong>才能调用</strong>
+          短时调用票 + 直打 sidecar。private / 待审批 / 弃用 / restricted 出不了新票。
+        </div>
+      </div>
+      <p>登录身份不进调用票。看见 ≠ 能调。</p>
+
+      <h3>一期已经有什么</h3>
+      <ul>
+        <li>登记：管理台填入、网址同步、Agent 自注册。</li>
+        <li>审批：<code>approval_required</code> 须管理员通过；开发者不能自审。</li>
+        <li>出票与探活：HMAC 短 TTL；周期探活 / 重抓；升版旧票作废。</li>
+        <li>两户：<code>aidata.hermes</code> 真技能；<code>lab.echo</code> 跨进程回声。</li>
+      </ul>
+
+      <h3>管理台六页（顶栏四字）</h3>
+      <div class="brief-grid">
+        <div class="chip"><strong>浏览目录</strong> 名片、来源、审批筛</div>
+        <div class="chip"><strong>调用关系</strong> 节点与边（管理员）</div>
+        <div class="chip"><strong>活动动态</strong> 搜索 / 出票 / 调用对账</div>
+        <div class="chip"><strong>发布登记</strong> 主动登记 / 网址同步 / 发给智能体</div>
+        <div class="chip"><strong>账号管理</strong> 仅管理员</div>
+        <div class="chip"><strong>系统设置</strong> 五主题，只存在本机</div>
+      </div>
+
+      <h3>一条真技能，一条回声</h3>
+      <ul>
+        <li><code>aidata.hermes</code>：sidecar <code>:8091</code>。<code>collect.strategy.query</code> 进程内枚举；volume 无包装器也算调通。</li>
+        <li><code>lab.echo</code>：HTTP <code>:8092</code> + sidecar <code>:8093</code>。<code>echo.ping</code> 可搜可调；<code>echo.secret</code> 只在 Extended Card。</li>
+        <li>不改 Hermes 内核。ChatBI 八字段搁置；第二户不是 ChatBI。</li>
+      </ul>
+
+      <h3>刻意不做什么</h3>
+      <ul>
+        <li>不当调用网关：Registry 不转发业务。</li>
+        <li>不改 Hermes 内核 / SOUL；图像闭环禁止改道。</li>
+        <li>不做公司 SSO、不做外置 agentgateway（以后）。</li>
+        <li>不催 ChatBI 八字段；不收官方 MCP 商店或 Prompt 仓。</li>
+      </ul>
+
+      <h3>本机十分钟能走通</h3>
+      <ul>
+        <li>起 Registry → 浏览器 <code>http://127.0.0.1:8088</code> → <code>admin</code> 登录浏览目录。</li>
+        <li>起 Hermes sidecar → Hub 上 <code>aidata.hermes</code> 变 online。</li>
+        <li><code>python3 -m sunny_client --skill collect.strategy.query --slots '{"mission_name":"living_room"}'</code></li>
+        <li>可选再起 echo 两进程，调 <code>echo.ping</code>。</li>
+      </ul>
+      <p class="muted">这是本机 / 局域网路径，不是「已上生产」声明。详细参数见下面各模块。</p>
+
+      <h3>进程、鉴权、调用链</h3>
+      <div class="brief-grid">
+        <div class="chip"><strong>端口</strong> Registry+Hub 8088 · Hermes 8091 · echo 8092 · echo sidecar 8093</div>
+        <div class="chip"><strong>三种身份</strong> Hub 会话 · Agent <code>sak_</code> · 首次 <code>X-Sunny-Enroll</code></div>
+        <div class="chip"><strong>调用链</strong> 搜卡 → 出票 → 直打 sidecar → sidecar 回 Registry 验票 → 本地执行</div>
+        <div class="chip"><strong>门闩</strong> 会话不能当调用票；升版旧票作废；发现默认只要 online</div>
+      </div>
+
+      <h3>现在该做，以后再说</h3>
+      <ul>
+        <li>现在：Hub <code>kind</code> 分栏，预防混表。</li>
+        <li>以后：SSO、外置 agentgateway。</li>
+        <li>不抄：Registry <code>/chat</code>、语义路由、LLM 扫仓生成 Card、IM 编排。</li>
+      </ul>
+      <p>把接入说明交给下一个 Agent，而不是再写一套点对点。运行中握手包：<code>GET /api/v1/join.md</code>（匿名无令牌）。合同仍在 <code>docs/specs/</code> 与 ADR。</p>
+    </article>
 
     <article class="module" id="order">
       <h2>1. 推荐启动顺序</h2>
@@ -201,7 +355,7 @@ python3 -m sunny_client --skill echo.ping --slots '{"query":"hello"}'</code></pr
         <tbody>
           <tr><td><code>SUNNY_REGISTRY_URL</code></td><td><code>http://127.0.0.1:8088</code></td><td>转发目标</td></tr>
           <tr><td><code>SUNNY_AGENT_KEY</code></td><td>空</td><td>Header <code>X-Sunny-Agent-Key</code></td></tr>
-          <tr><td><code>SUNNY_AGENT_KEY_FILE</code></td><td>—</td><td>从文件读 key；路径含 <code>scratch</code> 会退出</td></tr>
+          <tr><td><code>SUNNY_AGENT_KEY_FILE</code></td><td>未设置</td><td>从文件读 key；路径含 <code>scratch</code> 会退出</td></tr>
         </tbody>
       </table>
       <p><strong>启动</strong>（Cursor 等客户端挂 command，不要当普通 HTTP 服务）</p>
@@ -213,7 +367,9 @@ python3 -m sunny_registry.mcp_stdio</code></pre>
     </article>
 
     <p class="note">联调提醒：adapter 必须等 Registry 起来再拉，否则 enroll 心跳会 Connection refused。共享变量 <code>SUNNY_REGISTRY_URL</code>、<code>SUNNY_ADMIN_TOKEN</code>、<code>SUNNY_ENROLL_TOKEN</code> 跨进程保持一致。</p>
-    <p class="foot">对照合同：<a href="../specs/adapter.md">adapter.md</a>、<a href="../specs/registry-api.md">registry-api.md</a>、<a href="../specs/mcp-discovery.md">mcp-discovery.md</a>。接口分组见 <a href="api.html">API 文档</a>。</p>
+    <p class="foot">对照合同：仓库 <code>docs/specs/adapter.md</code>、<code>docs/specs/registry-api.md</code>、<code>docs/specs/mcp-discovery.md</code>。接口分组见 <a href="api.html">API 文档</a>。</p>
+    </div>
   </main>
+  <script src="assets/site.js"></script>
 </body>
 </html>

@@ -6,26 +6,27 @@
   <title>API · SUNNY · Agent Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/site.css" />
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="index.html">SUNNY<span>_</span> Agent Hub</a>
+    <a class="brand" href="index.html">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23fff'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%230b1f33' stroke-width='1.8'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%2300e676'/%3E%3C/svg%3E" alt="" width="32" height="32" />
+      <span class="word">
+        <small>文档站</small>
+        <b>SUNNY<span class="cursor">_</span> Agent Hub</b>
+      </span>
+    </a>
     <nav aria-label="文档导航">
-      <a href="index.html">门户</a>
+      <a href="index.html">文档门户</a>
+      <a href="briefing.html">项目介绍</a>
       <a href="engineering.html">工程说明</a>
-      <a href="api.html" aria-current="page">API</a>
-      <a href="briefing.html">对外汇报</a>
+      <a href="api.html" aria-current="page">API 参考</a>
     </nav>
   </header>
-  <main class="wrap">
-    <section class="hero">
-      <h1>API 文档</h1>
-      <p>Registry 默认 <code>http://127.0.0.1:8088</code>。业务调用不经 Registry，出票后直打 sidecar。不要把 FastAPI <code>/docs</code> 当对外合同（英文 schema，含内部字段）。</p>
-    </section>
-
-    <nav class="toc">
+  <main class="wrap doc">
+    <nav class="toc" aria-label="本页目录">
       <strong>分组</strong>
       <ol>
         <li><a href="#auth">鉴权</a></li>
@@ -37,6 +38,20 @@
         <li><a href="#sidecar">Sidecar</a></li>
       </ol>
     </nav>
+    <div class="doc-body">
+    <section class="hero solo">
+      <div>
+        <p class="kicker">系统集成参考</p>
+        <h1>发现、出票、不代调</h1>
+        <p>先按身份选择接口，再沿“登记、发现、出票、直调”接入。Registry 默认基址为 <code>http://127.0.0.1:8088</code>。</p>
+      </div>
+    </section>
+
+    <section class="api-paths" aria-label="API 阅读路径">
+      <a href="#discovery"><strong>能力消费者</strong><span>发现 → 出票 → sidecar 调用</span></a>
+      <a href="#enroll"><strong>能力提供方</strong><span>登记 → 心跳 → 更新名片</span></a>
+      <a href="#admin"><strong>平台管理者</strong><span>审批 → 生命周期 → 活动审计</span></a>
+    </section>
 
     <section class="section" id="auth">
       <h2>鉴权</h2>
@@ -188,8 +203,10 @@ curl -sS -X POST http://127.0.0.1:8091/sunny/invoke/collect.strategy.query \
       <p>A2A 导出在 Registry <code>GET /agents/{id}/a2a</code>，不在 sidecar。映射 URL 只来自文件，不接受 slots 里的地址。YAML 映射需本机 PyYAML。</p>
     </section>
 
-    <p class="note">合同真源：<a href="../specs/registry-api.md">registry-api.md</a>、<a href="../specs/adapter.md">adapter.md</a>、<a href="../specs/mcp-discovery.md">mcp-discovery.md</a>、<a href="../specs/policy.md">policy.md</a>。启动参数见 <a href="engineering.html">工程说明</a>。</p>
+    <p class="note">合同真源：仓库 <code>docs/specs/registry-api.md</code>、<code>docs/specs/adapter.md</code>、<code>docs/specs/mcp-discovery.md</code>、<code>docs/specs/policy.md</code>。启动参数见 <a href="engineering.html">工程说明</a>。</p>
     <p class="foot">本页不列完整调用票或真实 <code>sak_</code>。</p>
+    </div>
   </main>
+  <script src="assets/site.js"></script>
 </body>
 </html>

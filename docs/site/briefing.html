@@ -3,173 +3,273 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>对外汇报 · SUNNY · Agent Hub</title>
+  <meta name="description" content="SUNNY Agent Hub 项目介绍：连接企业内分散智能体的发现、授权与调用控制面。" />
+  <title>项目介绍 · SUNNY Agent Hub</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="assets/site.css" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/site.css?v=20260921.5" />
 </head>
-<body class="deck-body">
+<body class="report-page">
   <header class="topbar">
-    <a class="brand" href="index.html">SUNNY<span>_</span> Agent Hub</a>
+    <a class="brand" href="index.html">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23fff'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%230b1f33' stroke-width='1.8'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%2300e676'/%3E%3C/svg%3E" alt="" width="32" height="32" />
+      <span class="word">
+        <small>文档站</small>
+        <b>SUNNY<span class="cursor">_</span> Agent Hub</b>
+      </span>
+    </a>
     <nav aria-label="文档导航">
-      <a href="index.html">门户</a>
+      <a href="index.html">文档门户</a>
+      <a href="briefing.html" aria-current="page">项目介绍</a>
       <a href="engineering.html">工程说明</a>
-      <a href="api.html">API</a>
-      <a href="briefing.html" aria-current="page">对外汇报</a>
+      <a href="api.html">API 参考</a>
     </nav>
   </header>
 
-  <div class="deck" id="deck">
-    <section class="slide" data-slide="1">
-      <div class="kicker">企业内控制面</div>
-      <h1>SUNNY · Agent Hub</h1>
-      <p>策展型 Agent 注册中心。不替代各智能体的决策，只让它们按名片互相发现、按策略互相调用。</p>
-      <p class="muted">名字来自电影 I, Robot 里的机器人桑尼。本机 / 局域网已验证，不是公网市场。</p>
-    </section>
+  <main class="wrap doc report-layout">
+    <nav class="toc" aria-label="本页目录">
+      <strong>本页目录</strong>
+      <ol>
+        <li><a href="#summary">执行摘要</a></li>
+        <li><a href="#challenge">现状与问题</a></li>
+        <li><a href="#solution">解决方案</a></li>
+        <li><a href="#architecture">工程架构</a></li>
+        <li><a href="#journey">协作路径</a></li>
+        <li><a href="#audiences">角色价值</a></li>
+        <li><a href="#delivery">当前成果</a></li>
+        <li><a href="#governance">治理边界</a></li>
+        <li><a href="#next">下一步</a></li>
+      </ol>
+      <button class="print-button" type="button" data-print>打印 / 导出 PDF</button>
+    </nav>
 
-    <section class="slide" data-slide="2">
-      <div class="kicker">问题</div>
-      <h2>要解决什么</h2>
-      <ul>
-        <li>每次对接都是点对点：基址、鉴权、槽位写死在调用方。</li>
-        <li>对方一换接口，调用方全改；新 Agent 没有标准「怎么介绍自己」。</li>
-        <li>能力在对方脑子里，不在目录里。</li>
-        <li>同事不会为了接入把业务重写成完整 A2A Server。</li>
-      </ul>
-    </section>
-
-    <section class="slide" data-slide="3">
-      <div class="kicker">一句话</div>
-      <h2>只做控制面，不做运行时</h2>
-      <p>企业内策展注册中心 + 薄适配器。发现谁在、会什么、谁看得见、版本与心跳。</p>
-      <p>不造对话引擎，不当调用网关，不逼业务 Agent 改内核。</p>
-    </section>
-
-    <section class="slide" data-slide="4">
-      <div class="kicker">原则</div>
-      <h2>发现 ≠ 访问</h2>
-      <div class="grid-2">
-        <div class="chip">
-          <strong>搜到名片</strong>
-          目录、公开卡、MCP 工具。知道对方有什么技能、接口在哪。
+    <div class="doc-body">
+      <section class="report-cover" id="summary">
+        <div>
+          <p class="kicker">项目介绍</p>
+          <h1><span>连接企业内分散的</span><span>智能体能力</span></h1>
+          <p class="report-deck">SUNNY 建立统一的能力发现与访问控制面，让智能体在不迁移数据、不绕过权限的前提下开展协作。</p>
         </div>
-        <div class="chip">
-          <strong>才能调用</strong>
-          短时调用票 + 直打 sidecar。private / 待审批 / 弃用 / restricted 出不了新票。
+        <div class="cover-principle">
+          <span>核心判断</span>
+          <strong>企业缺少的不是更多智能体，而是让现有智能体彼此发现并受控协作的机制。</strong>
         </div>
-      </div>
-      <p>登录身份不进调用票。看见 ≠ 能调。</p>
-    </section>
+      </section>
 
-    <section class="slide" data-slide="5">
-      <div class="kicker">现网已落地</div>
-      <h2>一期已经有什么</h2>
-      <ul>
-        <li>登记：管理台填入、网址同步、Agent 自注册。</li>
-        <li>审批：<code>approval_required</code> 须管理员通过；开发者不能自审。</li>
-        <li>出票与探活：HMAC 短 TTL；周期探活 / 重抓；升版旧票作废。</li>
-        <li>两户：<code>aidata.hermes</code> 真技能；<code>lab.echo</code> 跨进程回声。</li>
-      </ul>
-    </section>
-
-    <section class="slide" data-slide="6">
-      <div class="kicker">管理台</div>
-      <h2>六页，顶栏四字</h2>
-      <div class="grid-2">
-        <div class="chip"><strong>浏览目录</strong> 名片、来源、审批筛</div>
-        <div class="chip"><strong>调用关系</strong> 节点与边（管理员）</div>
-        <div class="chip"><strong>活动动态</strong> 搜索 / 出票 / 调用对账</div>
-        <div class="chip"><strong>发布登记</strong> 主动登记 / 网址同步 / 发给智能体</div>
-        <div class="chip"><strong>账号管理</strong> 仅管理员</div>
-        <div class="chip"><strong>系统设置</strong> 五主题，只存在本机</div>
-      </div>
-    </section>
-
-    <section class="slide" data-slide="7">
-      <div class="kicker">两户</div>
-      <h2>一条真技能，一条回声</h2>
-      <ul>
-        <li><code>aidata.hermes</code>：sidecar <code>:8091</code>。<code>collect.strategy.query</code> 进程内枚举；volume 无包装器也算调通。</li>
-        <li><code>lab.echo</code>：HTTP <code>:8092</code> + sidecar <code>:8093</code>。<code>echo.ping</code> 可搜可调；<code>echo.secret</code> 只在 Extended Card。</li>
-        <li>不改 Hermes 内核。ChatBI 八字段搁置；第二户不是 ChatBI。</li>
-      </ul>
-    </section>
-
-    <section class="slide" data-slide="8">
-      <div class="kicker">边界</div>
-      <h2>刻意不做什么</h2>
-      <ul>
-        <li>不当调用网关：Registry 不转发业务。</li>
-        <li>不改 Hermes 内核 / SOUL；图像闭环禁止改道。</li>
-        <li>不做公司 SSO、不做外置 agentgateway（以后）。</li>
-        <li>不催 ChatBI 八字段；不收官方 MCP 商店或 Prompt 仓。</li>
-      </ul>
-    </section>
-
-    <section class="slide" data-slide="9">
-      <div class="kicker">演示路径</div>
-      <h2>本机十分钟能走通</h2>
-      <ul>
-        <li>起 Registry → 浏览器 <code>http://127.0.0.1:8088</code> → <code>admin</code> 登录浏览目录。</li>
-        <li>起 Hermes sidecar → Hub 上 <code>aidata.hermes</code> 变 online。</li>
-        <li><code>python3 -m sunny_client --skill collect.strategy.query --slots '{"mission_name":"living_room"}'</code></li>
-        <li>可选再起 echo 两进程，调 <code>echo.ping</code>。</li>
-      </ul>
-      <p>这是本机 / 局域网路径，不是「已上生产」声明。</p>
-    </section>
-
-    <section class="slide" data-slide="10">
-      <div class="kicker">技术附录</div>
-      <h2>进程、鉴权、调用链</h2>
-      <div class="grid-2">
-        <div class="chip">
-          <strong>端口</strong>
-          Registry+Hub 8088 · Hermes 8091 · echo 8092 · echo sidecar 8093
+      <section class="report-section executive-summary">
+        <div>
+          <h2>执行摘要</h2>
+          <p>企业智能体通常建设在不同业务系统中。每个智能体掌握不同数据，也受不同账号、审批和审计规则约束。当前它们大多只能被所在系统内的用户使用，其他智能体既不知道其能力，也没有标准方式判断是否可以访问。</p>
+          <p>SUNNY Agent Hub 将这些智能体组织成一个可治理的能力目录。它登记“谁会什么、在哪里、谁能看见、如何申请访问”，并通过短时调用票和目标侧 sidecar 建立受控调用链。</p>
         </div>
-        <div class="chip">
-          <strong>三种身份</strong>
-          Hub 会话 · Agent <code>sak_</code> · 首次 <code>X-Sunny-Enroll</code>
-        </div>
-        <div class="chip">
-          <strong>调用链</strong>
-          搜卡 → 出票 → 直打 sidecar → sidecar 回 Registry 验票 → 本地执行
-        </div>
-        <div class="chip">
-          <strong>门闩</strong>
-          会话不能当调用票；升版旧票作废；发现默认只要 online
-        </div>
-      </div>
-    </section>
+        <aside class="summary-box">
+          <strong>一句话定位</strong>
+          <p>企业内策展型 Agent 注册中心与调用控制面。</p>
+          <strong>关键边界</strong>
+          <p>发现不等于访问。Registry 不代理业务流量，数据和最终执行权限仍留在原系统。</p>
+        </aside>
+      </section>
 
-    <section class="slide" data-slide="11">
-      <div class="kicker">材料</div>
-      <h2>文档入口</h2>
-      <ul>
-        <li><a href="engineering.html">工程说明</a> — 参数、启动、成功判定</li>
-        <li><a href="api.html">API</a> — 发现 / 登记 / 出票 / 管理 / MCP / sidecar</li>
-        <li>运行中握手包：<code>GET /api/v1/join.md</code>（匿名无令牌）</li>
-        <li>合同仍在 <code>docs/specs/</code> 与 ADR，不要拿调研当规格</li>
-      </ul>
-    </section>
+      <section class="report-section" id="challenge">
+        <h2>现状：能力存在，但组织不可见</h2>
+        <p class="section-intro">智能体已经分布在企业各处，阻碍协作的是跨系统发现、权限表达与接入成本。</p>
+        <div class="silo-map" role="img" aria-label="多个业务系统中的智能体各自拥有数据和权限，但彼此不可发现">
+          <article>
+            <span>经营分析系统</span>
+            <strong>数据分析智能体</strong>
+            <p>经营指标、报表数据</p>
+            <small>数据权限 + 查询审计</small>
+          </article>
+          <article>
+            <span>流程审批系统</span>
+            <strong>审批智能体</strong>
+            <p>流程状态、审批动作</p>
+            <small>角色权限 + 人工审批</small>
+          </article>
+          <article>
+            <span>研发与运维系统</span>
+            <strong>运维智能体</strong>
+            <p>服务状态、变更能力</p>
+            <small>环境权限 + 操作审计</small>
+          </article>
+          <div class="silo-gap">
+            <strong>不可发现</strong>
+            <span>没有统一名片</span>
+            <span>没有访问说明</span>
+            <span>只能点对点接入</span>
+          </div>
+        </div>
+        <div class="impact-row">
+          <div><strong>重复建设</strong><p>同类能力被多次开发，已有能力难以复用。</p></div>
+          <div><strong>集成脆弱</strong><p>地址、鉴权和参数写死，接口变化牵动调用方。</p></div>
+          <div><strong>治理失焦</strong><p>能力边界、审批状态和版本缺少统一视图。</p></div>
+          <div><strong>协作受阻</strong><p>一个智能体无法主动找到可用的企业能力。</p></div>
+        </div>
+      </section>
 
-    <section class="slide" data-slide="12">
-      <div class="kicker">下一步</div>
-      <h2>现在该做，以后再说</h2>
-      <ul>
-        <li>现在：Hub <code>kind</code> 分栏，预防混表。</li>
-        <li>以后：SSO、外置 agentgateway。</li>
-        <li>不抄：Registry <code>/chat</code>、语义路由、LLM 扫仓生成 Card、IM 编排。</li>
-      </ul>
-      <p>把接入说明交给下一个 Agent，而不是再写一套点对点。</p>
-    </section>
-  </div>
+      <section class="report-section" id="solution">
+        <h2>方案：在现有系统之上增加控制面</h2>
+        <p class="section-intro">SUNNY 不建设新的数据孤岛，而是用标准名片、策略门闩和薄适配器连接已有智能体。</p>
+        <div class="solution-layers">
+          <div class="layer consumers">
+            <span>使用入口</span>
+            <strong>用户、业务智能体、开发工具、MCP 客户端</strong>
+          </div>
+          <div class="layer hub">
+            <span>SUNNY 控制面</span>
+            <strong>能力目录 + 搜索发现 + 审批策略 + 短时出票 + 活动追踪</strong>
+          </div>
+          <div class="layer systems">
+            <span>原有执行面</span>
+            <strong>各业务智能体 + sidecar + 原系统数据与权限</strong>
+          </div>
+        </div>
+        <div class="principle-grid">
+          <article><strong>能力有名片</strong><p>Agent Card 描述技能、输入、可见范围、数据等级与接口。</p></article>
+          <article><strong>访问有门闩</strong><p>公开、内部、受限、待审批、停用与弃用状态决定是否出票。</p></article>
+          <article><strong>调用有凭证</strong><p>调用方取得绑定目标、技能和版本的 HMAC 短时票。</p></article>
+          <article><strong>执行留原处</strong><p>请求直达目标 sidecar，原系统继续掌握数据与最终执行。</p></article>
+        </div>
+      </section>
 
-  <div class="deck-nav" aria-label="翻页">
-    <button type="button" id="deck-prev">上一页</button>
-    <span id="deck-index">1 / 12</span>
-    <button type="button" id="deck-next">下一页</button>
-  </div>
-  <script src="assets/deck.js"></script>
+      <section class="report-section" id="architecture">
+        <h2>工程架构：控制面与业务执行分离</h2>
+        <p class="section-intro">Registry 负责“能否发现和能否调用”，sidecar 负责“验证后如何执行”。</p>
+        <div class="report-architecture" role="img" aria-label="调用方通过 REST、MCP 或 Hub 发现能力并向 Registry 申请调用票，随后直达目标 sidecar 执行业务">
+          <div class="ra-callers">
+            <article><strong>业务用户</strong><span>Hub 管理台</span></article>
+            <article><strong>调用智能体</strong><span>REST / Client</span></article>
+            <article><strong>开发工具</strong><span>MCP stdio</span></article>
+          </div>
+          <div class="ra-arrow">登记、发现、审批、出票</div>
+          <article class="ra-registry">
+            <span>控制面</span>
+            <strong>SUNNY Registry</strong>
+            <p>FastAPI + SQLite + FTS5</p>
+            <small>Card、策略、用户、票、版本、心跳、活动</small>
+          </article>
+          <div class="ra-direct">短时票签发后，业务请求不经过 Registry</div>
+          <div class="ra-targets">
+            <article><strong>Hermes sidecar</strong><span>本地 handler / AIDATA</span></article>
+            <article><strong>Echo sidecar</strong><span>映射到 HTTP 服务</span></article>
+            <article><strong>后续业务 sidecar</strong><span>保留原系统权限</span></article>
+          </div>
+        </div>
+        <div class="fact-strip">
+          <span><strong>Registry</strong> 8088</span>
+          <span><strong>Hermes sidecar</strong> 8091</span>
+          <span><strong>Echo HTTP</strong> 8092</span>
+          <span><strong>Echo sidecar</strong> 8093</span>
+        </div>
+      </section>
+
+      <section class="report-section" id="journey">
+        <h2>一次跨智能体协作如何发生</h2>
+        <ol class="journey">
+          <li><strong>登记能力</strong><p>智能体主动注册、管理台填写，或通过 Well-Known 地址同步 Agent Card。</p></li>
+          <li><strong>策展审批</strong><p>管理员核对能力、数据等级和发现范围，待审批能力不向对等智能体开放。</p></li>
+          <li><strong>搜索发现</strong><p>调用方通过 REST、MCP 或 Hub 按技能、标签和自然语言查询在线能力。</p></li>
+          <li><strong>申请出票</strong><p>Registry 检查调用方、目标、技能、版本及策略，签发短时调用票。</p></li>
+          <li><strong>直达执行</strong><p>调用方携票访问目标 sidecar，sidecar 回 Registry 验票后调用本地能力。</p></li>
+          <li><strong>记录变化</strong><p>调用结果进入活动记录；Card 升版使旧票失效，停用或弃用阻止新票。</p></li>
+        </ol>
+      </section>
+
+      <section class="report-section" id="audiences">
+        <h2>面向三类角色的价值</h2>
+        <div class="audience-panels">
+          <article>
+            <span>企业用户</span>
+            <h3>找到正确能力，理解访问条件</h3>
+            <ul>
+              <li>按业务问题查找已登记智能体与技能</li>
+              <li>看到能力状态、适用范围和审批要求</li>
+              <li>减少在多个系统间询问“谁能处理”的成本</li>
+            </ul>
+          </article>
+          <article>
+            <span>开发人员</span>
+            <h3>用稳定合同接入，不重写智能体</h3>
+            <ul>
+              <li>通过 Card、REST、MCP 和 Join Packet 接入</li>
+              <li>用通用 sidecar 映射本地 handler 或 HTTP 服务</li>
+              <li>获得版本、心跳、探活、搜索与调用票能力</li>
+            </ul>
+          </article>
+          <article>
+            <span>管理者</span>
+            <h3>形成企业能力目录与治理视图</h3>
+            <ul>
+              <li>统一查看能力归属、状态、可见范围和审批</li>
+              <li>控制发布、停用、弃用与密钥轮换</li>
+              <li>通过活动与调用关系追踪协作链路</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="report-section" id="delivery">
+        <h2>当前工程成果</h2>
+        <p class="section-intro">以下均为仓库内已实现能力。当前定位是本机与局域网验证，不宣称生产就绪。</p>
+        <div class="delivery-grid">
+          <article><strong>注册与同步</strong><p>管理台登记、Agent 自注册、Well-Known 拉取与周期刷新。</p></article>
+          <article><strong>策展与权限</strong><p>管理员、开发者角色，创建者权限，待审批、通过与拒绝流程。</p></article>
+          <article><strong>发现与搜索</strong><p>REST、公开卡、Extended Card、A2A 导出、MCP 和 SQLite FTS5。</p></article>
+          <article><strong>安全调用</strong><p>HMAC 短时票，调用方、目标、技能与 Card 版本绑定，sidecar 验票。</p></article>
+          <article><strong>生命周期</strong><p>心跳、探活、在线状态、停用、弃用、修订快照和 Card 变更流。</p></article>
+          <article><strong>双实例验证</strong><p><code>aidata.hermes</code> 真实技能与 <code>lab.echo</code> 跨进程 HTTP 映射。</p></article>
+        </div>
+        <div class="evidence">
+          <strong>工程验证路径</strong>
+          <code>搜索技能 → 申请调用票 → 直达 sidecar → 验票 → 本地或 HTTP 执行 → 上报结果</code>
+        </div>
+      </section>
+
+      <section class="report-section" id="governance">
+        <h2>治理边界与风险控制</h2>
+        <div class="governance-matrix">
+          <div class="matrix-head"><span>SUNNY 负责</span><span>原系统继续负责</span></div>
+          <div><span>能力名片、目录与版本</span><span>业务数据的存储与质量</span></div>
+          <div><span>发现范围与接入审批</span><span>数据行列权限与业务审批</span></div>
+          <div><span>调用资格与短时票</span><span>最终动作授权与业务执行</span></div>
+          <div><span>心跳、探活和调用活动</span><span>业务审计、合规留痕与责任认定</span></div>
+        </div>
+        <div class="risk-callout">
+          <strong>不能混淆的两件事</strong>
+          <p>在目录中“看见某个技能”，只代表调用方知道该能力存在。是否能获取完整信息、是否能出票、目标系统是否执行，仍由分层策略和原系统权限共同决定。</p>
+        </div>
+      </section>
+
+      <section class="report-section" id="next">
+        <h2>建议的下一步</h2>
+        <div class="next-grid">
+          <article>
+            <span>近期</span>
+            <strong>强化目录治理</strong>
+            <p>增加 Hub 的智能体类型分栏，完善浏览器端端到端测试，明确生产配置基线。</p>
+          </article>
+          <article>
+            <span>中期</span>
+            <strong>接入真实业务试点</strong>
+            <p>选择 2-3 个跨系统高频场景，验证审批、权限、失败处理与审计闭环。</p>
+          </article>
+          <article>
+            <span>后续</span>
+            <strong>连接企业基础设施</strong>
+            <p>评估 SSO、外置 agent gateway、高可用存储与集中可观测平台。</p>
+          </article>
+        </div>
+        <div class="closing-statement">
+          <strong>SUNNY 的目标不是替代每个智能体。</strong>
+          <p>它让企业已经拥有的智能体能力，从“散落在系统里”变成“可发现、可审批、可调用、可治理”的共享能力网络。</p>
+        </div>
+      </section>
+
+      <p class="note"><strong>阅读下一步：</strong>技术实现与启动参数见 <a href="engineering.html">工程说明</a>，接口合同摘要见 <a href="api.html">API 参考</a>，机器级实现合同仍以 <code>docs/specs/</code> 和 ADR 为准。</p>
+      <p class="foot">SUNNY Agent Hub 项目介绍。生成日期：2026-09-21。</p>
+    </div>
+  </main>
+  <script src="assets/site.js"></script>
 </body>
 </html>

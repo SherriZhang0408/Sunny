@@ -3,46 +3,116 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SUNNY · Agent Hub 文档</title>
+  <title>SUNNY Agent Hub · 工程文档与介绍</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/site.css" />
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="index.html">SUNNY<span>_</span> Agent Hub</a>
+    <a class="brand" href="index.html">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23fff'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%230b1f33' stroke-width='1.8'/%3E%3Ccircle cx='16' cy='16' r='2' fill='%2300e676'/%3E%3C/svg%3E" alt="" width="32" height="32" />
+      <span class="word">
+        <small>文档站</small>
+        <b>SUNNY<span class="cursor">_</span> Agent Hub</b>
+      </span>
+    </a>
     <nav aria-label="文档导航">
-      <a href="index.html" aria-current="page">门户</a>
+      <a href="index.html" aria-current="page">文档门户</a>
+      <a href="briefing.html">项目介绍</a>
       <a href="engineering.html">工程说明</a>
-      <a href="api.html">API</a>
-      <a href="briefing.html">对外汇报</a>
+      <a href="api.html">API 参考</a>
     </nav>
   </header>
   <main class="wrap">
-    <section class="hero">
-      <h1>给人看的三份材料</h1>
-      <p>合同仍在 <code>docs/specs/</code>。这里是工程怎么跑、接口怎么调、对外怎么讲。可离线打开；以后可挂到 Registry 的 <code>/help</code>，这次不进 Hub 顶栏。</p>
+    <section class="hero portal-hero">
+      <div>
+        <p class="kicker">企业智能体能力控制面</p>
+        <h1>让分散的智能体<br />可发现、可治理、可协作</h1>
+        <p>统一登记能力与访问规则，但不搬走业务数据，也不绕过原系统权限。</p>
+        <div class="hero-actions">
+          <a class="button primary" href="briefing.html">阅读项目介绍</a>
+          <a class="button secondary" href="engineering.html">查看工程实现</a>
+        </div>
+      </div>
+      <aside class="hero-aside signal-panel" aria-label="SUNNY 核心边界">
+        <strong>核心原则</strong>
+        <dl>
+          <div><dt>发现</dt><dd>知道谁会什么</dd></div>
+          <div><dt>授权</dt><dd>策略与审批决定能否访问</dd></div>
+          <div><dt>调用</dt><dd>出票后直达目标 sidecar</dd></div>
+        </dl>
+        <p>发现不等于访问，Registry 不转发业务调用。</p>
+      </aside>
     </section>
-    <div class="cards">
-      <a class="card" href="engineering.html">
-        <div class="badge">运维 / 接入</div>
-        <h2>工程说明</h2>
-        <p>每个模块填什么环境变量、怎么启动、怎样算成功，以及依赖谁。</p>
-      </a>
-      <a class="card" href="api.html">
-        <div class="badge">集成方</div>
-        <h2>API 文档</h2>
-        <p>发现、登记、出票、管理台、MCP、sidecar。中文说明，不是 FastAPI <code>/docs</code>。</p>
-      </a>
-      <a class="card" href="briefing.html">
-        <div class="badge">混合场汇报</div>
-        <h2>对外汇报演示</h2>
-        <p>约 12 页幻灯。前半产品口径，后半技术附录。键盘左右翻页。</p>
-      </a>
-    </div>
-    <p class="note">和规格的分工：ADR / <code>docs/specs/*.md</code> 是实现合同；本目录是给人用的入口。口径冲突时以代码和 ADR 为准，并回写规格。</p>
-    <p class="foot">产品名 SUNNY · Agent Hub。字标仍写 Sunny。默认本机 <code>http://127.0.0.1:8088</code>。</p>
+
+    <section class="problem-strip" aria-label="当前问题与 SUNNY 的作用">
+      <div>
+        <span class="step-mark">现状</span>
+        <strong>智能体分散</strong>
+        <p>能力、数据和审批权限留在不同系统中，彼此无法发现。</p>
+      </div>
+      <div>
+        <span class="step-mark">SUNNY</span>
+        <strong>建立可信目录</strong>
+        <p>用 Agent Card、审批和短时调用票连接控制面。</p>
+      </div>
+      <div>
+        <span class="step-mark">结果</span>
+        <strong>受控协作</strong>
+        <p>目标系统继续执行原权限，调用链可追踪、可撤销。</p>
+      </div>
+    </section>
+
+    <section class="portal-section">
+      <h2>按你的角色开始</h2>
+      <p class="section-intro">三份文档对应三个阅读问题：为什么做、如何运行、怎样接入。</p>
+      <div class="cards cards-three">
+        <a class="card card-report" href="briefing.html">
+          <div class="badge">管理者 / 用户 / 开发人员</div>
+          <h3>项目介绍</h3>
+          <p>业务痛点、解决方案、角色价值、治理边界、当前成果与下一步。</p>
+          <span class="go">打开介绍文档 →</span>
+        </a>
+        <a class="card" href="engineering.html">
+          <div class="badge">开发 / 运维</div>
+          <h3>工程说明</h3>
+          <p>模块关系、部署顺序、运行参数、进程依赖与成功判定。</p>
+          <span class="go">查看工程说明 →</span>
+        </a>
+        <a class="card alt" href="api.html">
+          <div class="badge">系统集成方</div>
+          <h3>API 参考</h3>
+          <p>发现、登记、审批、出票、MCP 与 sidecar 接口及常见错误。</p>
+          <span class="go">查看 API 参考 →</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="boundary-grid" aria-label="工程边界">
+      <div>
+        <h2>SUNNY 管什么</h2>
+        <ul class="check-list">
+          <li>智能体名片、技能与版本</li>
+          <li>可见范围、审批状态与生命周期</li>
+          <li>短时调用票、心跳、探活与活动记录</li>
+          <li>REST、MCP 和握手包形式的发现入口</li>
+        </ul>
+      </div>
+      <div>
+        <h2>SUNNY 不接管什么</h2>
+        <ul class="plain-list">
+          <li>不集中复制各系统业务数据</li>
+          <li>不替代原系统的数据与审批权限</li>
+          <li>不充当业务流量网关或对话编排器</li>
+          <li>不要求智能体重写内核</li>
+        </ul>
+      </div>
+    </section>
+
+    <p class="note"><strong>文档边界：</strong>本目录用于阅读、介绍和接入。ADR 与 <code>docs/specs/*.md</code> 是实现合同；若口径冲突，以代码和 ADR 为准。</p>
+    <p class="foot">SUNNY Agent Hub 当前为本机与局域网验证工程，不代表已完成生产级部署。</p>
   </main>
 </body>
 </html>
