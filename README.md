@@ -48,7 +48,7 @@ python3 scripts/validate_card.py cards/aidata.hermes.sample.json
 
 ## 文档
 
-- [工程说明 / API / 对外汇报（HTML）](docs/site/index.html)
+- [文档门户（项目介绍 / 工程说明 / API）](docs/site/index.html)（运行中打开 `/help/`）
 - [文档地图](docs/README.md)
 - [同类项目对照](docs/research/同类项目对照.md)
 - [给其他 Agent 的接入说明](docs/join.md)
