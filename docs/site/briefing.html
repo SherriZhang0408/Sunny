@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>对外汇报 · SUNNY · Agent Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body class="deck-body">
+  <header class="topbar">
+    <a class="brand" href="index.html">SUNNY<span>_</span> Agent Hub</a>
+    <nav aria-label="文档导航">
+      <a href="index.html">门户</a>
+      <a href="engineering.html">工程说明</a>
+      <a href="api.html">API</a>
+      <a href="briefing.html" aria-current="page">对外汇报</a>
+    </nav>
+  </header>
+
+  <div class="deck" id="deck">
+    <section class="slide" data-slide="1">
+      <div class="kicker">企业内控制面</div>
+      <h1>SUNNY · Agent Hub</h1>
+      <p>策展型 Agent 注册中心。不替代各智能体的决策，只让它们按名片互相发现、按策略互相调用。</p>
+      <p class="muted">名字来自电影 I, Robot 里的机器人桑尼。本机 / 局域网已验证，不是公网市场。</p>
+    </section>
+
+    <section class="slide" data-slide="2">
+      <div class="kicker">问题</div>
+      <h2>要解决什么</h2>
+      <ul>
+        <li>每次对接都是点对点：基址、鉴权、槽位写死在调用方。</li>
+        <li>对方一换接口，调用方全改；新 Agent 没有标准「怎么介绍自己」。</li>
+        <li>能力在对方脑子里，不在目录里。</li>
+        <li>同事不会为了接入把业务重写成完整 A2A Server。</li>
+      </ul>
+    </section>
+
+    <section class="slide" data-slide="3">
+      <div class="kicker">一句话</div>
+      <h2>只做控制面，不做运行时</h2>
+      <p>企业内策展注册中心 + 薄适配器。发现谁在、会什么、谁看得见、版本与心跳。</p>
+      <p>不造对话引擎，不当调用网关，不逼业务 Agent 改内核。</p>
+    </section>
+
+    <section class="slide" data-slide="4">
+      <div class="kicker">原则</div>
+      <h2>发现 ≠ 访问</h2>
+      <div class="grid-2">
+        <div class="chip">
+          <strong>搜到名片</strong>
+          目录、公开卡、MCP 工具。知道对方有什么技能、接口在哪。
+        </div>
+        <div class="chip">
+          <strong>才能调用</strong>
+          短时调用票 + 直打 sidecar。private / 待审批 / 弃用 / restricted 出不了新票。
+        </div>
+      </div>
+      <p>登录身份不进调用票。看见 ≠ 能调。</p>
+    </section>
+
+    <section class="slide" data-slide="5">
+      <div class="kicker">现网已落地</div>
+      <h2>一期已经有什么</h2>
+      <ul>
+        <li>登记：管理台填入、网址同步、Agent 自注册。</li>
+        <li>审批：<code>approval_required</code> 须管理员通过；开发者不能自审。</li>
+        <li>出票与探活：HMAC 短 TTL；周期探活 / 重抓；升版旧票作废。</li>
+        <li>两户：<code>aidata.hermes</code> 真技能；<code>lab.echo</code> 跨进程回声。</li>
+      </ul>
+    </section>
+
+    <section class="slide" data-slide="6">
+      <div class="kicker">管理台</div>
+      <h2>六页，顶栏四字</h2>
+      <div class="grid-2">
+        <div class="chip"><strong>浏览目录</strong> 名片、来源、审批筛</div>
+        <div class="chip"><strong>调用关系</strong> 节点与边（管理员）</div>
+        <div class="chip"><strong>活动动态</strong> 搜索 / 出票 / 调用对账</div>
+        <div class="chip"><strong>发布登记</strong> 主动登记 / 网址同步 / 发给智能体</div>
+        <div class="chip"><strong>账号管理</strong> 仅管理员</div>
+        <div class="chip"><strong>系统设置</strong> 五主题，只存在本机</div>
+      </div>
+    </section>
+
+    <section class="slide" data-slide="7">
+      <div class="kicker">两户</div>
+      <h2>一条真技能，一条回声</h2>
+      <ul>
+        <li><code>aidata.hermes</code>：sidecar <code>:8091</code>。<code>collect.strategy.query</code> 进程内枚举；volume 无包装器也算调通。</li>
+        <li><code>lab.echo</code>：HTTP <code>:8092</code> + sidecar <code>:8093</code>。<code>echo.ping</code> 可搜可调；<code>echo.secret</code> 只在 Extended Card。</li>
+        <li>不改 Hermes 内核。ChatBI 八字段搁置；第二户不是 ChatBI。</li>
+      </ul>
+    </section>
+
+    <section class="slide" data-slide="8">
+      <div class="kicker">边界</div>
+      <h2>刻意不做什么</h2>
+      <ul>
+        <li>不当调用网关：Registry 不转发业务。</li>
+        <li>不改 Hermes 内核 / SOUL；图像闭环禁止改道。</li>
+        <li>不做公司 SSO、不做外置 agentgateway（以后）。</li>
+        <li>不催 ChatBI 八字段；不收官方 MCP 商店或 Prompt 仓。</li>
+      </ul>
+    </section>
+
+    <section class="slide" data-slide="9">
+      <div class="kicker">演示路径</div>
+      <h2>本机十分钟能走通</h2>
+      <ul>
+        <li>起 Registry → 浏览器 <code>http://127.0.0.1:8088</code> → <code>admin</code> 登录浏览目录。</li>
+        <li>起 Hermes sidecar → Hub 上 <code>aidata.hermes</code> 变 online。</li>
+        <li><code>python3 -m sunny_client --skill collect.strategy.query --slots '{"mission_name":"living_room"}'</code></li>
+        <li>可选再起 echo 两进程，调 <code>echo.ping</code>。</li>
+      </ul>
+      <p>这是本机 / 局域网路径，不是「已上生产」声明。</p>
+    </section>
+
+    <section class="slide" data-slide="10">
+      <div class="kicker">技术附录</div>
+      <h2>进程、鉴权、调用链</h2>
+      <div class="grid-2">
+        <div class="chip">
+          <strong>端口</strong>
+          Registry+Hub 8088 · Hermes 8091 · echo 8092 · echo sidecar 8093
+        </div>
+        <div class="chip">
+          <strong>三种身份</strong>
+          Hub 会话 · Agent <code>sak_</code> · 首次 <code>X-Sunny-Enroll</code>
+        </div>
+        <div class="chip">
+          <strong>调用链</strong>
+          搜卡 → 出票 → 直打 sidecar → sidecar 回 Registry 验票 → 本地执行
+        </div>
+        <div class="chip">
+          <strong>门闩</strong>
+          会话不能当调用票；升版旧票作废；发现默认只要 online
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-slide="11">
+      <div class="kicker">材料</div>
+      <h2>文档入口</h2>
+      <ul>
+        <li><a href="engineering.html">工程说明</a> — 参数、启动、成功判定</li>
+        <li><a href="api.html">API</a> — 发现 / 登记 / 出票 / 管理 / MCP / sidecar</li>
+        <li>运行中握手包：<code>GET /api/v1/join.md</code>（匿名无令牌）</li>
+        <li>合同仍在 <code>docs/specs/</code> 与 ADR，不要拿调研当规格</li>
+      </ul>
+    </section>
+
+    <section class="slide" data-slide="12">
+      <div class="kicker">下一步</div>
+      <h2>现在该做，以后再说</h2>
+      <ul>
+        <li>现在：Hub <code>kind</code> 分栏，预防混表。</li>
+        <li>以后：SSO、外置 agentgateway。</li>
+        <li>不抄：Registry <code>/chat</code>、语义路由、LLM 扫仓生成 Card、IM 编排。</li>
+      </ul>
+      <p>把接入说明交给下一个 Agent，而不是再写一套点对点。</p>
+    </section>
+  </div>
+
+  <div class="deck-nav" aria-label="翻页">
+    <button type="button" id="deck-prev">上一页</button>
+    <span id="deck-index">1 / 12</span>
+    <button type="button" id="deck-next">下一页</button>
+  </div>
+  <script src="assets/deck.js"></script>
+</body>
+</html>

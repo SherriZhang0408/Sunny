@@ -2,6 +2,17 @@
 
 按「现行决策 → 规格 → 立项调研」读，避免把调研当合同。
 
+## 现行 · 工程与汇报
+
+给人看的 HTML，可离线打开。合同仍是下面的 ADR / specs。这次不进 Hub 顶栏；以后可挂 Registry `/help`，或拷进 `web/help/`。
+
+| 文档 | 用途 |
+|------|------|
+| [文档门户](./site/index.html) | 三份入口，以及和 specs 的分工 |
+| [工程说明](./site/engineering.html) | 各模块参数、启动命令、成功判定、依赖 |
+| [API](./site/api.html) | 发现 / 登记 / 出票 / 管理 / MCP / sidecar |
+| [对外汇报演示](./site/briefing.html) | 混合场约 12 页幻灯；键盘左右翻页 |
+
 ## 现行
 
 | 文档 | 用途 |

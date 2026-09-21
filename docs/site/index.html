@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SUNNY · Agent Hub 文档</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">SUNNY<span>_</span> Agent Hub</a>
+    <nav aria-label="文档导航">
+      <a href="index.html" aria-current="page">门户</a>
+      <a href="engineering.html">工程说明</a>
+      <a href="api.html">API</a>
+      <a href="briefing.html">对外汇报</a>
+    </nav>
+  </header>
+  <main class="wrap">
+    <section class="hero">
+      <h1>给人看的三份材料</h1>
+      <p>合同仍在 <code>docs/specs/</code>。这里是工程怎么跑、接口怎么调、对外怎么讲。可离线打开；以后可挂到 Registry 的 <code>/help</code>，这次不进 Hub 顶栏。</p>
+    </section>
+    <div class="cards">
+      <a class="card" href="engineering.html">
+        <div class="badge">运维 / 接入</div>
+        <h2>工程说明</h2>
+        <p>每个模块填什么环境变量、怎么启动、怎样算成功，以及依赖谁。</p>
+      </a>
+      <a class="card" href="api.html">
+        <div class="badge">集成方</div>
+        <h2>API 文档</h2>
+        <p>发现、登记、出票、管理台、MCP、sidecar。中文说明，不是 FastAPI <code>/docs</code>。</p>
+      </a>
+      <a class="card" href="briefing.html">
+        <div class="badge">混合场汇报</div>
+        <h2>对外汇报演示</h2>
+        <p>约 12 页幻灯。前半产品口径，后半技术附录。键盘左右翻页。</p>
+      </a>
+    </div>
+    <p class="note">和规格的分工：ADR / <code>docs/specs/*.md</code> 是实现合同；本目录是给人用的入口。口径冲突时以代码和 ADR 为准，并回写规格。</p>
+    <p class="foot">产品名 SUNNY · Agent Hub。字标仍写 Sunny。默认本机 <code>http://127.0.0.1:8088</code>。</p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,271 @@
+/* SUNNY · Agent Hub 文档站。令牌对齐管理台浅色：Docker 蓝、品牌绿、纸底。 */
+:root {
+  --text-primary: #1a1a1a;
+  --text-secondary: #666;
+  --text-muted: #999;
+  --line: #d5dde6;
+  --paper: #f3f6f8;
+  --card: #ffffff;
+  --navy: #0b1f33;
+  --brand-green: #00ff41;
+  --docker: #2496ed;
+  --docker-deep: #1a6fb3;
+  --ok: #1a7f4b;
+  --ok-bg: #e5f6ec;
+  --danger: #b42318;
+  --danger-bg: #fef3f2;
+  --code-bg: #0b1f33;
+  --code-fg: #d7e7f4;
+  --row-line: #edf1f5;
+  --shadow: 0 10px 30px rgba(11, 31, 51, 0.08);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --font: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--text-primary);
+  background: var(--paper);
+  line-height: 1.55;
+}
+
+a { color: var(--docker-deep); }
+a:hover { color: var(--docker); }
+code, kbd {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: #eef3f7;
+  padding: 0.08em 0.35em;
+  border-radius: 4px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px;
+  background: var(--navy);
+  color: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.topbar .brand {
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.topbar .brand span { color: var(--brand-green); }
+.topbar nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 14px;
+}
+.topbar nav a {
+  color: #d5e6f3;
+  text-decoration: none;
+}
+.topbar nav a:hover,
+.topbar nav a[aria-current="page"] { color: #fff; }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 28px 24px 80px; }
+.hero h1 { margin: 0 0 8px; font-size: 1.85rem; }
+.hero p { margin: 0 0 20px; color: var(--text-secondary); max-width: 46rem; }
+.note {
+  background: #e8f1fe;
+  border: 1px solid #c5dbf5;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 18px 18px 16px;
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+a.card:hover { border-color: var(--docker); }
+.card h2 { margin: 0 0 8px; font-size: 1.15rem; }
+.card p { margin: 0; color: var(--text-secondary); font-size: 0.95rem; }
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef2f5;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.module {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 20px 22px 8px;
+  margin: 22px 0;
+  box-shadow: var(--shadow);
+}
+.module h2 { margin: 0 0 6px; font-size: 1.25rem; }
+.module .lead { color: var(--text-secondary); margin: 0 0 14px; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  margin: 0 0 16px;
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--row-line);
+}
+th { color: var(--text-secondary); font-weight: 600; width: 22%; }
+td:first-child code { background: transparent; padding: 0; }
+
+pre {
+  background: var(--code-bg);
+  color: var(--code-fg);
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+pre code { background: none; color: inherit; padding: 0; }
+
+.toc {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin: 16px 0 24px;
+}
+.toc ol { margin: 8px 0 0; padding-left: 1.3rem; }
+.toc a { text-decoration: none; }
+
+.section { margin: 36px 0; }
+.section > h2 {
+  font-size: 1.4rem;
+  border-bottom: 2px solid var(--navy);
+  padding-bottom: 6px;
+}
+
+.ok { color: var(--ok); }
+.muted { color: var(--text-secondary); }
+.foot {
+  margin-top: 40px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* 演示幻灯 */
+.deck-body {
+  background: var(--navy);
+  color: #f4f8fb;
+  height: 100vh;
+  overflow: hidden;
+}
+.deck-body .topbar { position: static; }
+.deck {
+  height: calc(100vh - 52px);
+  position: relative;
+}
+.slide {
+  display: none;
+  height: 100%;
+  padding: 48px 64px 72px;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.slide.active { display: flex; }
+.slide h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); margin: 0 0 16px; }
+.slide h2 { font-size: clamp(1.5rem, 3vw, 2.2rem); margin: 0 0 18px; }
+.slide p, .slide li { font-size: clamp(1rem, 2vw, 1.25rem); color: #d5e6f3; }
+.slide ul { margin: 0; padding-left: 1.2rem; }
+.slide li { margin: 8px 0; }
+.slide .kicker {
+  color: var(--brand-green);
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.slide .grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.slide .chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.slide .chip strong { display: block; color: #fff; margin-bottom: 4px; }
+.slide a { color: #7ec8ff; }
+
+.deck-nav {
+  position: fixed;
+  right: 24px;
+  bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #d5e6f3;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.deck-nav button {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.deck-nav button:hover { background: rgba(255, 255, 255, 0.16); }
+.deck-nav button:disabled { opacity: 0.35; cursor: default; }
+
+html[data-motion="reduce"] .slide,
+html[data-motion="reduce"] .deck-nav button { transition: none; }
+
+@media (max-width: 720px) {
+  .wrap { padding: 20px 16px 64px; }
+  .slide { padding: 28px 20px 80px; }
+  .slide .grid-2 { grid-template-columns: 1fr; }
+  th { width: auto; }
+}

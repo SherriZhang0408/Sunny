@@ -22,15 +22,16 @@
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/v1/health` | 探活；含 `public_url`、`join` |
+| GET | `/api/v1/health` | 探活；含 `ok`、`service`、`role`、`public_url`、`join`、`agents`、`fts`、`sweep` |
 | POST | `/api/v1/auth/login` | Hub 登录。body: `{username, password}` |
 | GET | `/api/v1/auth/me` | 当前 Hub 用户与权限 |
-| GET · POST · DELETE | `/api/v1/users` | 账号管理（管理员） |
-| GET | `/api/v1/join` · `/api/v1/join.md` | 握手包。匿名无令牌；`?include_token=1` 需管理员 |
+| GET · POST | `/api/v1/users` | 账号管理（管理员） |
+| DELETE | `/api/v1/users/{user_id}` | 删除账号（管理员；不能删最后一名管理员） |
+| GET | `/api/v1/join` · `/api/v1/join.md` | 握手包。匿名无令牌；`?include_token=1` 需管理员；`?download=1` 触发下载 |
 | GET · POST | `/mcp` | MCP 发现面。GET 回工具清单与 `instructions`；POST 为 JSON-RPC（`list_agents` / `search_registry` / `get_card` / `get_extended_card` / `describe_access` / `list_card_changes` / `join`）。描述访问方式，不签发票、不代调。stdio：`python3 -m sunny_registry.mcp_stdio`。规格见 [mcp-discovery.md](./mcp-discovery.md) |
 | POST | `/api/v1/agents` | 注册。body: `{card, enrollment_source: self\|hub}`。Hub 用户发布会记 `created_by` |
-| POST | `/api/v1/agents/pull` | Well-Known 拉取。body: `{url, enrollment_source?, agent_id?}`。Hub 用户或 `X-Sunny-Enroll`。拉到的卡仍走 schema / 禁密钥。已存在则刷新（不重发 key） |
-| GET | `/api/v1/agents` | 列表。管理员可见禁用；开发者/对等见 `registered` 与 `deprecated`。可滤 `discovery`、`approval_status`。`q` 与 `/search` 同走 FTS5 |
+| POST | `/api/v1/agents/pull` | Well-Known 拉取。body: `{url, enrollment_source?, agent_id?, discovery?}`。Hub 用户或 `X-Sunny-Enroll`。管理员可 overlay 缺的 `agent_id`；`discovery` 拉取方可覆盖。拉到的卡仍走 schema / 禁密钥。已存在则刷新（不重发 key） |
+| GET | `/api/v1/agents` | 列表。管理员可见禁用；开发者/对等见 `registered` 与 `deprecated`。可滤 `q`、`workspace`、`discovery`、`approval_status`、`enrollment_source`、`runtime_status`；管理员可 `include_disabled`。`q` 与 `/search` 同走 FTS5 |
 | GET | `/api/v1/agents/{id}` | 详情 + Card；含 `can_manage` / `can_delete` / `card_view` / `has_extended`。对等与非创建者开发者拿公开卡（剥 restricted）；管理员 / 创建者 / 本 Agent 拿完整卡 |
 | GET | `/api/v1/agents/{id}/extended` | 鉴权完整卡。已登记对等（`sak_`）或 Hub 会话；可见性与读卡相同。`ETag` 为 Card `version`；`Vary: Authorization` |
 | GET | `/api/v1/agents/{id}/a2a` | 纯 A2A Card：剥掉 `x-sunny`、Sunny 扩展与 restricted 技能。可见性与读卡相同。`ETag` 为 Card `version`；`If-None-Match` 命中回 `304` |
@@ -45,16 +46,18 @@
 | GET | `/api/v1/approvals` | 管理员待办。`status=pending\|rejected\|approved`，默认 pending |
 | POST | `/api/v1/agents/{id}/approve` | 管理员通过：`discovery=registered_peers`，`approval_status=approved` |
 | POST | `/api/v1/agents/{id}/reject` | 管理员拒绝。body `{reason}`；仍不可见 |
-| GET | `/api/v1/agents/{id}/revisions` | 变更历史 |
+| GET | `/api/v1/agents/{id}/revisions` | 变更历史（对等或 Hub） |
+| GET | `/api/v1/agents/{id}/revisions/{rev}` | 某一版 Card 快照（仅管理员） |
 | GET | `/api/v1/search` | `skill` `tag` `workspace` `q`；只返回 `discovery=registered_peers` 且只读、`data_class` 为 public/internal 的 skill（`registered` 与 `deprecated` 都可能命中）。**默认只要 `runtime_status=online`**。管理员可 `alive=0`。`q` 走 FTS5。`skill=` 仍是精确 id |
 | GET | `/api/v1/card-changes` | Card `version` 变更流。`since` `agent_id` `limit`。对等只看见 `registered_peers` 且可读生命周期的卡。不推送 |
 | POST | `/api/v1/tickets` | 签发短时票。载荷含 `card_version`；对等不能调 private / approval_required / restricted / write |
 | POST | `/api/v1/tickets/verify` | 验票。Card `version` 变更后旧票作废 |
 | POST | `/api/v1/invocations` | 上报一次调用结果（画关系图） |
 | GET | `/api/v1/graph` | 节点 + 调用边 |
-| GET | `/api/v1/activity` | 管理员时间线。`kind` `trace_id` `q`；搜索 / 出票 / 调用 / 名片 |
+| GET | `/api/v1/activity` | 管理员时间线。`kind` `trace_id` `q` `limit`（默认 80，上限 200）；搜索 / 出票 / 调用 / 名片 |
+| GET | `/` · `/assets/*` | Hub 静态页。其余非 `api/` 路径回 SPA |
 
-Registry **不转发**业务调用。
+Registry **不转发**业务调用。会话令牌不能当调用票：`POST /tickets/verify` 拒 `typ=session` 与缺 caller/callee/skill 的残票。
 
 ## 启动
 

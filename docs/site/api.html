@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>API · SUNNY · Agent Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">SUNNY<span>_</span> Agent Hub</a>
+    <nav aria-label="文档导航">
+      <a href="index.html">门户</a>
+      <a href="engineering.html">工程说明</a>
+      <a href="api.html" aria-current="page">API</a>
+      <a href="briefing.html">对外汇报</a>
+    </nav>
+  </header>
+  <main class="wrap">
+    <section class="hero">
+      <h1>API 文档</h1>
+      <p>Registry 默认 <code>http://127.0.0.1:8088</code>。业务调用不经 Registry，出票后直打 sidecar。不要把 FastAPI <code>/docs</code> 当对外合同（英文 schema，含内部字段）。</p>
+    </section>
+
+    <nav class="toc">
+      <strong>分组</strong>
+      <ol>
+        <li><a href="#auth">鉴权</a></li>
+        <li><a href="#discovery">发现</a></li>
+        <li><a href="#enroll">接入登记</a></li>
+        <li><a href="#tickets">出票与调用链</a></li>
+        <li><a href="#admin">Hub 管理</a></li>
+        <li><a href="#mcp">MCP</a></li>
+        <li><a href="#sidecar">Sidecar</a></li>
+      </ol>
+    </nav>
+
+    <section class="section" id="auth">
+      <h2>鉴权</h2>
+      <table>
+        <thead><tr><th>身份</th><th>怎么带</th><th>能做什么</th></tr></thead>
+        <tbody>
+          <tr><td>管理员</td><td>登录后 Bearer 会话，或 <code>Authorization: Bearer $SUNNY_ADMIN_TOKEN</code></td><td>全部读写、账号、活动、关系图、含令牌握手包</td></tr>
+          <tr><td>开发者</td><td>登录后 Bearer 会话</td><td>看已登记卡；发布自己的卡；只改/删 <code>created_by</code> 是自己的卡。不能出票</td></tr>
+          <tr><td>Agent</td><td><code>X-Sunny-Agent-Key: sak_…</code> 或 Bearer 同一把 key</td><td>搜对等、读卡、心跳、更新自己、要票</td></tr>
+          <tr><td>首次自注册</td><td><code>X-Sunny-Enroll: $SUNNY_ENROLL_TOKEN</code></td><td>只允许 <code>enrollment_source=self</code> 的创建</td></tr>
+        </tbody>
+      </table>
+      <p>Hub 角色<strong>不进</strong>调用票。会话令牌 <code>typ=session</code> 拿去 <code>POST /tickets/verify</code> 会 401 <code>not a call ticket</code>。缺 caller / callee / skill 的残票是 401 <code>malformed ticket</code>。票与 key 不写进 Card。示例里的 <code>sak_…</code> 是占位，不要贴真实 key。</p>
+    </section>
+
+    <section class="section" id="discovery">
+      <h2>发现</h2>
+      <p class="muted">搜到卡 ≠ 能调。公开卡剥 restricted；搜索默认只要 <code>online</code>。</p>
+      <table>
+        <thead><tr><th>方法</th><th>路径</th><th>鉴权</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>GET</td><td><code>/api/v1/health</code></td><td>匿名</td><td><code>ok</code>、<code>service</code>、<code>public_url</code>、<code>join</code>、<code>agents</code>、<code>fts</code>、<code>sweep</code></td></tr>
+          <tr><td>GET</td><td><code>/api/v1/join</code> · <code>/join.md</code></td><td>匿名；<code>?include_token=1</code> 需管理员。<code>?download=1</code> 触发下载</td><td>握手包。匿名无 enroll token</td></tr>
+          <tr><td>GET</td><td><code>/api/v1/agents</code></td><td>对等或 Hub</td><td>可滤 <code>q</code>、<code>workspace</code>、<code>discovery</code>、<code>approval_status</code>、<code>enrollment_source</code>、<code>runtime_status</code>。管理员可 <code>include_disabled</code></td></tr>
+          <tr><td>GET</td><td><code>/api/v1/agents/{id}</code></td><td>同上</td><td>详情 + Card。<code>can_manage</code> / <code>card_view</code>。对等拿公开卡</td></tr>
+          <tr><td>GET</td><td><code>/api/v1/agents/{id}/extended</code></td><td>对等或 Hub</td><td>完整卡。ETag = Card <code>version</code>；<code>Vary: Authorization</code></td></tr>
+          <tr><td>GET</td><td><code>/api/v1/agents/{id}/a2a</code></td><td>同上</td><td>剥 <code>x-sunny</code> 与 restricted。支持 <code>If-None-Match</code> → 304</td></tr>
+          <tr><td>GET</td><td><code>/api/v1/search</code></td><td>对等或 Hub</td><td><code>skill</code> <code>tag</code> <code>workspace</code> <code>q</code>。只出对等可见、只读、public/internal。默认 <code>online</code>。管理员 <code>alive=0</code> 可看下线。<code>q</code> 走 FTS5</td></tr>
+          <tr><td>GET</td><td><code>/api/v1/card-changes</code></td><td>对等或 Hub</td><td><code>since</code> <code>agent_id</code> <code>limit</code>。拉取升版，不推送</td></tr>
+        </tbody>
+      </table>
+<pre><code>curl -sS http://127.0.0.1:8088/api/v1/health
+curl -sS -H "X-Sunny-Agent-Key: sak_…" \
+  "http://127.0.0.1:8088/api/v1/search?skill=collect.strategy.query"</code></pre>
+      <p>常见错误：未登录/无 key → 401；对等看不见 private / 待审批 → 404；搜索无命中 → <code>items: []</code>。</p>
+    </section>
+
+    <section class="section" id="enroll">
+      <h2>接入登记</h2>
+      <table>
+        <thead><tr><th>方法</th><th>路径</th><th>鉴权</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>POST</td><td><code>/api/v1/agents</code></td><td>Hub 用户，或 Enroll + <code>self</code></td><td>body <code>{card, enrollment_source: self|hub}</code>。Hub 发布记 <code>created_by</code></td></tr>
+          <tr><td>POST</td><td><code>/api/v1/agents/pull</code></td><td>Hub 或 Enroll</td><td>body <code>{url, enrollment_source?, agent_id?, discovery?}</code>。缺的 <code>agent_id</code> 仅管理员可 overlay；<code>discovery</code> 拉取方可覆盖。已存在则刷新，不重发 key。仍走 schema / 禁密钥</td></tr>
+          <tr><td>POST</td><td><code>/api/v1/agents/{id}/refresh</code></td><td>管理员 / 创建者 / 本 Agent</td><td>按库里 <code>card_source_url</code> 重抓；失败留旧卡</td></tr>
+          <tr><td>POST</td><td><code>/api/v1/agents/{id}/heartbeat</code></td><td>管理员或本 Agent key</td><td>心跳</td></tr>
+        </tbody>
+      </table>
+<pre><code>curl -sS -X POST http://127.0.0.1:8088/api/v1/agents \
+  -H "X-Sunny-Enroll: $SUNNY_ENROLL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enrollment_source":"self","card":{...}}'
+
+curl -sS -X POST http://127.0.0.1:8088/api/v1/agents/pull \
+  -H "Authorization: Bearer &lt;hub-session&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"http://10.0.0.8:8091","discovery":"approval_required"}'</code></pre>
+      <p>常见错误：坏 JSON / schema → 400；非 http(s) 或元数据主机 → 拉取失败不入库；<code>file://</code> 与链路本地地址被拒；enroll 不能覆盖已有卡。</p>
+    </section>
+
+    <section class="section" id="tickets">
+      <h2>出票与调用链</h2>
+      <p class="muted">Registry 签发短时票并验票，<strong>不转发</strong>业务。sidecar 验票后本地执行。</p>
+      <table>
+        <thead><tr><th>方法</th><th>路径</th><th>鉴权</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>POST</td><td><code>/api/v1/tickets</code></td><td>管理员或 Agent key（开发者不可）</td><td>body <code>{caller_id?, callee_id, skill_id}</code>。Agent 的 caller 强制为自己。票带 <code>card_version</code></td></tr>
+          <tr><td>POST</td><td><code>/api/v1/tickets/verify</code></td><td>同上</td><td>body <code>{ticket, callee_id?, skill_id?}</code>。升版后旧票作废。拒会话令牌与残票</td></tr>
+          <tr><td>POST</td><td><code>/api/v1/invocations</code></td><td>同上</td><td>上报一次调用，画关系图。body <code>{caller_id?, callee_id, skill_id, status, trace_id?, ticket?}</code></td></tr>
+          <tr><td>POST</td><td>sidecar <code>/sunny/invoke/{skill_id}</code></td><td><code>Authorization: Bearer &lt;ticket&gt;</code></td><td>body <code>{slots, trace_id?}</code>。sidecar 回 Registry 验票后再执行</td></tr>
+        </tbody>
+      </table>
+<pre><code>curl -sS -X POST http://127.0.0.1:8088/api/v1/tickets \
+  -H "X-Sunny-Agent-Key: sak_…" \
+  -H "Content-Type: application/json" \
+  -d '{"callee_id":"aidata.hermes","skill_id":"collect.strategy.query"}'
+
+curl -sS -X POST http://127.0.0.1:8091/sunny/invoke/collect.strategy.query \
+  -H "Authorization: Bearer &lt;ticket&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{"slots":{"mission_name":"living_room"},"trace_id":"demo-1"}'</code></pre>
+      <p>常见错误：private / 待审批 / restricted / write → 对等 403；<code>deprecated</code> 或 <code>disabled</code> 拒新票 → 409；技能不在卡上 → 404；槽校验失败 → sidecar 400。票明文只在签发响应里出现一次，活动页最多留 <code>jti</code>。</p>
+    </section>
+
+    <section class="section" id="admin">
+      <h2>Hub 管理</h2>
+      <table>
+        <thead><tr><th>方法</th><th>路径</th><th>鉴权</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>POST</td><td><code>/api/v1/auth/login</code></td><td>匿名</td><td><code>{username, password}</code> → 会话 token + user</td></tr>
+          <tr><td>GET</td><td><code>/api/v1/auth/me</code></td><td>Hub 会话</td><td>当前用户与权限</td></tr>
+          <tr><td>GET · POST</td><td><code>/api/v1/users</code></td><td>管理员</td><td>账号列表 / 添加</td></tr>
+          <tr><td>DELETE</td><td><code>/api/v1/users/{user_id}</code></td><td>管理员</td><td>不能删最后一名管理员</td></tr>
+          <tr><td>PUT / PATCH / DELETE</td><td><code>/api/v1/agents/{id}</code></td><td>管理员、创建者或本 Agent（删仅管理员或创建者）</td><td>整卡 / 局部技能 / 删除</td></tr>
+          <tr><td>POST</td><td><code>…/disable</code> · <code>…/deprecate</code> · <code>…/enable</code></td><td>管理员</td><td>停用对等 404；弃用能读不能出新票；恢复 registered</td></tr>
+          <tr><td>POST</td><td><code>…/keys</code></td><td>管理员</td><td>新 <code>sak_</code> 明文只回一次</td></tr>
+          <tr><td>POST</td><td><code>…/probe</code></td><td>管理员或本 Agent</td><td>探 Card URL，不代发业务</td></tr>
+          <tr><td>GET</td><td><code>…/revisions</code></td><td>对等或 Hub</td><td>变更历史列表</td></tr>
+          <tr><td>GET</td><td><code>…/revisions/{rev}</code></td><td>仅管理员</td><td>某一版 Card 快照</td></tr>
+          <tr><td>GET</td><td><code>/api/v1/approvals</code></td><td>管理员</td><td><code>status=pending|rejected|approved</code>，默认 pending</td></tr>
+          <tr><td>POST</td><td><code>…/approve</code> · <code>…/reject</code></td><td>管理员</td><td>拒绝 body <code>{reason}</code>。开发者不能自审通过</td></tr>
+          <tr><td>GET</td><td><code>/api/v1/graph</code></td><td>管理员</td><td>节点 + 调用边</td></tr>
+          <tr><td>GET</td><td><code>/api/v1/activity</code></td><td>管理员</td><td><code>kind</code> <code>trace_id</code> <code>q</code> <code>limit</code>（默认 80，上限 200）</td></tr>
+        </tbody>
+      </table>
+<pre><code>curl -sS -X POST http://127.0.0.1:8088/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"sunny-dev-admin"}'</code></pre>
+      <p>Hub 静态：<code>GET /</code>、<code>/assets/*</code>；其余非 <code>api/</code> 路径回 SPA。错密码 401「用户名或密码错误」。</p>
+    </section>
+
+    <section class="section" id="mcp">
+      <h2>MCP</h2>
+      <p>自研 JSON-RPC（Python 3.8，不上官方 SDK）。<strong>只发现，不签发票、不代调。</strong></p>
+      <table>
+        <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>GET</td><td><code>/mcp</code></td><td>匿名。工具清单 + <code>instructions</code></td></tr>
+          <tr><td>POST</td><td><code>/mcp</code></td><td>JSON-RPC：<code>initialize</code> / <code>tools/list</code> / <code>tools/call</code> / <code>ping</code></td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>工具</th><th>对应 REST</th><th>不返回</th></tr></thead>
+        <tbody>
+          <tr><td><code>list_agents</code></td><td><code>GET /agents</code>（online、对等可见）</td><td>票、key、restricted</td></tr>
+          <tr><td><code>search_registry</code></td><td><code>GET /search</code></td><td>接口 URL、票、key</td></tr>
+          <tr><td><code>get_card</code></td><td>公开卡</td><td>restricted、已发票</td></tr>
+          <tr><td><code>get_extended_card</code></td><td><code>GET /extended</code></td><td>票、key</td></tr>
+          <tr><td><code>describe_access</code></td><td>无单独 REST</td><td>已签发的票（只给 sidecar / 出票路径配方）</td></tr>
+          <tr><td><code>list_card_changes</code></td><td><code>GET /card-changes</code></td><td>票</td></tr>
+          <tr><td><code>join</code></td><td><code>GET /join</code> 摘要</td><td>enroll token。匿名可调</td></tr>
+        </tbody>
+      </table>
+      <p>除 <code>join</code> 外需要 <code>sak_</code> 或 Hub 会话。stdio：<code>python3 -m sunny_registry.mcp_stdio</code>，见 <a href="engineering.html#mcp">工程说明</a>。</p>
+    </section>
+
+    <section class="section" id="sidecar">
+      <h2>Sidecar 与 Echo</h2>
+      <table>
+        <thead><tr><th>进程</th><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>adapter</td><td>GET</td><td><code>/health</code></td><td>匿名。<code>enrolled</code>、<code>mapping</code>、下游探活</td></tr>
+          <tr><td>adapter</td><td>GET</td><td><code>/.well-known/agent-card.json</code> · <code>agent.json</code> · <code>/sunny/v1/card</code></td><td>完整 SUNNY Card，ETag</td></tr>
+          <tr><td>adapter</td><td>POST</td><td><code>/sunny/invoke/{skill_id}</code></td><td>Bearer 调用票。验票后按映射 <code>local</code> 或 HTTP</td></tr>
+          <tr><td>echo</td><td>GET</td><td><code>/health</code></td><td><code>ready: true</code></td></tr>
+          <tr><td>echo</td><td>POST</td><td><code>/v1/echo</code></td><td>匿名回声。body <code>query</code> 或 <code>q</code>。由 echo sidecar 转发，不是票路径</td></tr>
+        </tbody>
+      </table>
+      <p>A2A 导出在 Registry <code>GET /agents/{id}/a2a</code>，不在 sidecar。映射 URL 只来自文件，不接受 slots 里的地址。YAML 映射需本机 PyYAML。</p>
+    </section>
+
+    <p class="note">合同真源：<a href="../specs/registry-api.md">registry-api.md</a>、<a href="../specs/adapter.md">adapter.md</a>、<a href="../specs/mcp-discovery.md">mcp-discovery.md</a>、<a href="../specs/policy.md">policy.md</a>。启动参数见 <a href="engineering.html">工程说明</a>。</p>
+    <p class="foot">本页不列完整调用票或真实 <code>sak_</code>。</p>
+  </main>
+</body>
+</html>

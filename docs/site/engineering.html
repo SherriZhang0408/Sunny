@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>工程说明 · SUNNY · Agent Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/site.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html">SUNNY<span>_</span> Agent Hub</a>
+    <nav aria-label="文档导航">
+      <a href="index.html">门户</a>
+      <a href="engineering.html" aria-current="page">工程说明</a>
+      <a href="api.html">API</a>
+      <a href="briefing.html">对外汇报</a>
+    </nav>
+  </header>
+  <main class="wrap">
+    <section class="hero">
+      <h1>工程说明</h1>
+      <p>每个可运行模块：填什么参数、怎么起、怎样算成功。密钥只写变量名和本机默认开发值，不要写进名片或 Git。</p>
+    </section>
+
+    <nav class="toc">
+      <strong>目录</strong>
+      <ol>
+        <li><a href="#order">启动顺序与端口</a></li>
+        <li><a href="#registry">Registry + Hub</a></li>
+        <li><a href="#adapter">Adapter（Hermes）</a></li>
+        <li><a href="#echo">Echo HTTP + Echo sidecar</a></li>
+        <li><a href="#client">sunny_client</a></li>
+        <li><a href="#validate">validate_card.py</a></li>
+        <li><a href="#mcp">mcp_stdio</a></li>
+      </ol>
+    </nav>
+
+    <article class="module" id="order">
+      <h2>1. 推荐启动顺序</h2>
+      <p class="lead">Registry 必须先起。Adapter 起来后会 enroll / 心跳。Client 是一次性命令，不是常驻进程。Hub 不单独起，跟 Registry 同进程。</p>
+<pre><code>1. python3 -m sunny_registry
+2. python3 -m sunny_adapter
+# 第二户（可选）
+3. python3 -m sunny_echo
+4. ECHO_URL=http://127.0.0.1:8092 \
+   SUNNY_ADAPTER_CARD=cards/lab.echo.sample.json \
+   SUNNY_ADAPTER_MAPPING=sunny_adapter/mappings/lab.echo.json \
+   SUNNY_ADAPTER_AGENT_ID=lab.echo \
+   SUNNY_ADAPTER_PORT=8093 \
+   python3 -m sunny_adapter
+5. python3 -m sunny_client --skill collect.strategy.query --slots '{"mission_name":"living_room"}'</code></pre>
+      <table>
+        <thead><tr><th>服务</th><th>默认端口</th><th>成功探活</th></tr></thead>
+        <tbody>
+          <tr><td>Registry + Hub</td><td>8088</td><td><code>GET /api/v1/health</code> → <code>ok: true</code></td></tr>
+          <tr><td>Adapter Hermes</td><td>8091</td><td><code>GET /health</code> → <code>enrolled: true</code></td></tr>
+          <tr><td>Echo HTTP</td><td>8092</td><td><code>GET /health</code> → <code>ready: true</code></td></tr>
+          <tr><td>Adapter lab.echo</td><td>8093</td><td><code>GET /health</code> → <code>mapping.ok</code></td></tr>
+        </tbody>
+      </table>
+      <p class="muted">监听默认 <code>0.0.0.0</code>。浏览器和名片里的基址用局域网 IPv4 或 <code>127.0.0.1</code>，不要写 <code>0.0.0.0</code>。前台终端被 abort 会带走进程，生产/联调用 <code>setsid</code> 拉起。</p>
+    </article>
+
+    <article class="module" id="registry">
+      <h2>2. Registry + Hub</h2>
+      <p class="lead">入口 <code>python3 -m sunny_registry</code>。无 CLI 参数，全靠环境变量。管理台静态页同进程提供，打开 <code>http://127.0.0.1:8088</code>。</p>
+      <table>
+        <thead><tr><th>变量</th><th>默认</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>SUNNY_HOST</code> / <code>SUNNY_PORT</code></td><td><code>0.0.0.0</code> / <code>8088</code></td><td>监听</td></tr>
+          <tr><td><code>SUNNY_PUBLIC_URL</code></td><td>空则推局域网 IPv4</td><td>握手包与名片基址</td></tr>
+          <tr><td><code>SUNNY_DB</code></td><td><code>data/sunny.db</code></td><td>SQLite</td></tr>
+          <tr><td><code>SUNNY_SEED</code></td><td><code>1</code>（<code>0</code> 关）</td><td>空库种 <code>aidata.hermes</code> + <code>lab.inspector</code></td></tr>
+          <tr><td><code>SUNNY_ADMIN_TOKEN</code></td><td><code>sunny-dev-admin</code></td><td>管理员 Bearer；也是 Hub <code>admin</code> 密码</td></tr>
+          <tr><td><code>SUNNY_DEVELOPER_PASSWORD</code></td><td><code>sunny-dev-developer</code></td><td>Hub <code>developer</code> 密码</td></tr>
+          <tr><td><code>SUNNY_ENROLL_TOKEN</code></td><td><code>sunny-dev-enroll</code></td><td>自注册 <code>X-Sunny-Enroll</code></td></tr>
+          <tr><td><code>SUNNY_TICKET_SECRET</code></td><td><code>sunny-dev-ticket</code></td><td>调用票与会话签名</td></tr>
+          <tr><td><code>SUNNY_TICKET_TTL_S</code></td><td><code>300</code></td><td>调用票秒数</td></tr>
+          <tr><td><code>SUNNY_SESSION_TTL_S</code></td><td><code>43200</code></td><td>Hub 会话秒数</td></tr>
+          <tr><td><code>SUNNY_HEARTBEAT_STALE_S</code></td><td><code>90</code></td><td>超时标 stale，搜索默认排除</td></tr>
+          <tr><td><code>SUNNY_PROBE_TIMEOUT_S</code></td><td><code>2</code></td><td>Card URL 探活</td></tr>
+          <tr><td><code>SUNNY_PULL_TIMEOUT_S</code></td><td><code>5</code></td><td>Well-Known 拉取</td></tr>
+          <tr><td><code>SUNNY_SWEEP_S</code></td><td><code>60</code>（pytest 下 <code>0</code>）</td><td>周期探活/重抓；<code>0</code> 关</td></tr>
+          <tr><td><code>SUNNY_REFRESH_INTERVAL_S</code></td><td><code>300</code></td><td>有 <code>card_source_url</code> 才重抓</td></tr>
+        </tbody>
+      </table>
+      <p><strong>启动</strong></p>
+<pre><code>python3 -m pip install -r requirements.txt
+SUNNY_SEED=1 python3 -m sunny_registry</code></pre>
+      <p><strong>成功判定</strong></p>
+      <ul>
+        <li><code>GET /api/v1/health</code> 含 <code>ok: true</code>、<code>service: sunny-registry</code>、<code>public_url</code>、<code>fts.ready</code>、<code>sweep</code></li>
+        <li>浏览器打开 <code>/</code> 看到登录页（<code>#/login</code>）；默认账号 <code>admin</code> / 上表管理员口令</li>
+        <li>空库且 <code>SUNNY_SEED=1</code> 时库里有演示对；缺样例卡则跳过演示对，进程仍能起</li>
+      </ul>
+      <p><strong>依赖</strong>：无其他 SUNNY 进程。Hub 静态资源来自 <code>web/</code>。</p>
+    </article>
+
+    <article class="module" id="adapter">
+      <h2>3. Adapter（Hermes / aidata.hermes）</h2>
+      <p class="lead">入口 <code>python3 -m sunny_adapter</code>。先起 Registry。默认挂 <code>aidata.hermes</code>，端口 8091。Hub 已有同一 <code>agent_id</code> 时只挂接口，不改 <code>enrollment_source</code>。</p>
+      <table>
+        <thead><tr><th>变量</th><th>默认</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>SUNNY_REGISTRY_URL</code></td><td><code>http://127.0.0.1:8088</code></td><td>Registry 基址</td></tr>
+          <tr><td><code>SUNNY_ADAPTER_HOST</code> / <code>PORT</code></td><td><code>0.0.0.0</code> / <code>8091</code></td><td>监听</td></tr>
+          <tr><td><code>SUNNY_ADAPTER_PUBLIC_URL</code></td><td>局域网 IP + <code>:8091/sunny/v1</code></td><td>写入 Card 的对外接口</td></tr>
+          <tr><td><code>SUNNY_ADAPTER_CARD</code></td><td><code>cards/aidata.hermes.sample.json</code></td><td>挂载名片</td></tr>
+          <tr><td><code>SUNNY_ADAPTER_AGENT_ID</code></td><td><code>aidata.hermes</code></td><td>标识</td></tr>
+          <tr><td><code>SUNNY_ADAPTER_MAPPING</code></td><td><code>sunny_adapter/mappings/aidata.hermes.json</code>（文件存在才加载）</td><td>技能路由</td></tr>
+          <tr><td><code>SUNNY_ADAPTER_KEY_FILE</code></td><td><code>data/adapter-keys/&lt;id&gt;.key</code></td><td>持久化 <code>sak_</code></td></tr>
+          <tr><td><code>SUNNY_AGENT_KEY</code></td><td>空</td><td>已有 key 可跳过签发</td></tr>
+          <tr><td><code>SUNNY_ADMIN_TOKEN</code> / <code>SUNNY_ENROLL_TOKEN</code></td><td>与 Registry 相同开发值</td><td>409 后 attach / 首次自注册</td></tr>
+          <tr><td><code>SUNNY_ADAPTER_HEARTBEAT_S</code></td><td><code>30</code></td><td>心跳间隔</td></tr>
+          <tr><td><code>SUNNY_ADAPTER_ENROLLMENT</code></td><td><code>self</code></td><td>注册来源字段</td></tr>
+          <tr><td><code>AIDATA_ROOT</code></td><td>本机 AIDataAgent 路径</td><td>有包装器才真 <code>collect.volume.query</code></td></tr>
+        </tbody>
+      </table>
+      <p><strong>启动</strong></p>
+<pre><code>python3 -m sunny_adapter</code></pre>
+      <p><strong>成功判定</strong></p>
+      <ul>
+        <li><code>GET /health</code>：<code>ok: true</code>、<code>enrolled: true</code></li>
+        <li>匿名可打开 <code>/.well-known/agent-card.json</code>（与 <code>/agent.json</code>、<code>/sunny/v1/card</code> 相同，带 ETag）</li>
+        <li>Hub 上该卡 <code>online</code>；钥匙在 <code>data/adapter-keys/aidata.hermes.key</code>（不进 Git）</li>
+        <li><code>collect.strategy.query</code> 进程内枚举即可调通；volume 无包装器时 <code>ready=false</code> <code>mock=true</code> 仍算调通</li>
+      </ul>
+      <p><strong>依赖</strong>：必须先有 Registry。可选 AIDataAgent 包装器。</p>
+    </article>
+
+    <article class="module" id="echo">
+      <h2>4. Echo HTTP + Echo sidecar</h2>
+      <p class="lead">第二户。回声进程不验票；验票在 <code>:8093</code> 的 sidecar。映射里的 <code>${ECHO_URL}</code> 不是 AdapterSettings 字段，要自己 export。</p>
+      <table>
+        <thead><tr><th>模块</th><th>变量</th><th>默认</th></tr></thead>
+        <tbody>
+          <tr><td>echo</td><td><code>SUNNY_ECHO_HOST</code> / <code>SUNNY_ECHO_PORT</code></td><td><code>0.0.0.0</code> / <code>8092</code></td></tr>
+          <tr><td>sidecar</td><td><code>ECHO_URL</code></td><td>映射展开，常用 <code>http://127.0.0.1:8092</code></td></tr>
+          <tr><td>sidecar</td><td><code>SUNNY_ADAPTER_AGENT_ID</code></td><td><code>lab.echo</code></td></tr>
+          <tr><td>sidecar</td><td><code>SUNNY_ADAPTER_PORT</code></td><td><code>8093</code>（勿与 8091 冲突）</td></tr>
+          <tr><td>sidecar</td><td><code>SUNNY_ADAPTER_CARD</code></td><td><code>cards/lab.echo.sample.json</code></td></tr>
+          <tr><td>sidecar</td><td><code>SUNNY_ADAPTER_MAPPING</code></td><td><code>sunny_adapter/mappings/lab.echo.json</code></td></tr>
+        </tbody>
+      </table>
+      <p><strong>启动</strong></p>
+<pre><code>python3 -m sunny_echo
+ECHO_URL=http://127.0.0.1:8092 \
+SUNNY_ADAPTER_CARD=cards/lab.echo.sample.json \
+SUNNY_ADAPTER_MAPPING=sunny_adapter/mappings/lab.echo.json \
+SUNNY_ADAPTER_AGENT_ID=lab.echo \
+SUNNY_ADAPTER_PORT=8093 \
+python3 -m sunny_adapter</code></pre>
+      <p><strong>成功判定</strong></p>
+      <ul>
+        <li>Echo：<code>GET :8092/health</code> → <code>ready: true</code>；<code>POST /v1/echo</code> <code>{"query":"hello"}</code> 回显</li>
+        <li>Sidecar：<code>GET :8093/health</code> 含 mapping；<code>python3 -m sunny_client --skill echo.ping --slots '{"query":"hello"}'</code> 得 <code>ready: true</code></li>
+        <li><code>echo.secret</code> 只在 Extended Card，目录搜不到</li>
+      </ul>
+      <p><strong>依赖</strong>：Registry + echo HTTP + echo sidecar。钥匙 <code>data/adapter-keys/lab.echo.key</code>。本机若 <code>:8092</code> 已被占，先换 <code>SUNNY_ECHO_PORT</code> 并同步 <code>ECHO_URL</code>。</p>
+    </article>
+
+    <article class="module" id="client">
+      <h2>5. sunny_client</h2>
+      <p class="lead">一次性 CLI：搜卡 → 出票 → <strong>直打 sidecar</strong>。可选把结果报到 <code>/invocations</code>。不是常驻服务。</p>
+      <table>
+        <thead><tr><th>参数 / 变量</th><th>默认</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>--skill</code></td><td>必填</td><td>技能 id</td></tr>
+          <tr><td><code>--slots</code></td><td><code>{}</code></td><td>JSON 对象；非法对象回码 1</td></tr>
+          <tr><td><code>--registry</code> / <code>SUNNY_REGISTRY_URL</code></td><td><code>http://127.0.0.1:8088</code></td><td>Registry</td></tr>
+          <tr><td><code>--callee</code></td><td>空则按搜索结果</td><td>指定被调方</td></tr>
+          <tr><td><code>--caller</code> / <code>SUNNY_CALLER_ID</code></td><td><code>lab.inspector</code></td><td>管理员代签时的 caller</td></tr>
+          <tr><td><code>SUNNY_AGENT_KEY</code></td><td>空</td><td>有则作 <code>X-Sunny-Agent-Key</code></td></tr>
+          <tr><td><code>SUNNY_ADMIN_TOKEN</code></td><td><code>sunny-dev-admin</code></td><td>无 agent key 时本机代签</td></tr>
+        </tbody>
+      </table>
+      <p><strong>启动</strong></p>
+<pre><code>python3 -m sunny_client --skill collect.strategy.query --slots '{"mission_name":"living_room"}'
+python3 -m sunny_client --skill echo.ping --slots '{"query":"hello"}'</code></pre>
+      <p><strong>成功判定</strong>：退出码 0，stdout 打印 JSON 结果。失败打 stderr，码 1。</p>
+      <p><strong>依赖</strong>：Registry + 目标 sidecar。Hermes 对话不要直接跑这条；可选 Skill 走 <code>python3 -m sunny_client.hermes discover|invoke</code>，需 <code>AIDATA_SUNNY=1</code> 或 <code>SUNNY_HERMES_SKILLS=1</code>，默认关，不改 Hermes 内核。</p>
+    </article>
+
+    <article class="module" id="validate">
+      <h2>6. validate_card.py</h2>
+      <p class="lead">离线校验名片：JSON Schema + 禁密钥扫描。不需要 Registry。</p>
+      <p><strong>启动</strong></p>
+<pre><code>python3 scripts/validate_card.py cards/aidata.hermes.sample.json</code></pre>
+      <p><strong>成功判定</strong>：码 0 打印 <code>OK …</code>；schema / 密钥失败码 1；用法或文件不存在码 2。</p>
+      <p><strong>依赖</strong>：<code>sunny_registry.card_validate</code>。样例卡本机可有，仓内 <code>cards/</code> 只跟踪 <code>.gitkeep</code>。</p>
+    </article>
+
+    <article class="module" id="mcp">
+      <h2>7. MCP stdio</h2>
+      <p class="lead">入口 <code>python3 -m sunny_registry.mcp_stdio</code>。把 stdin JSON-RPC 转到 Registry <code>POST /mcp</code>。只发现，不签发票、不代调。</p>
+      <table>
+        <thead><tr><th>变量</th><th>默认</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>SUNNY_REGISTRY_URL</code></td><td><code>http://127.0.0.1:8088</code></td><td>转发目标</td></tr>
+          <tr><td><code>SUNNY_AGENT_KEY</code></td><td>空</td><td>Header <code>X-Sunny-Agent-Key</code></td></tr>
+          <tr><td><code>SUNNY_AGENT_KEY_FILE</code></td><td>—</td><td>从文件读 key；路径含 <code>scratch</code> 会退出</td></tr>
+        </tbody>
+      </table>
+      <p><strong>启动</strong>（Cursor 等客户端挂 command，不要当普通 HTTP 服务）</p>
+<pre><code>SUNNY_REGISTRY_URL=http://127.0.0.1:8088 \
+SUNNY_AGENT_KEY=sak_… \
+python3 -m sunny_registry.mcp_stdio</code></pre>
+      <p><strong>成功判定</strong>：无 banner。向 stdin 写 Content-Length 帧，stdout 回 JSON-RPC。也可先 <code>GET /mcp</code> 看工具清单（匿名）。除 <code>join</code> 外需 <code>sak_</code> 或 Hub 会话。</p>
+      <p><strong>依赖</strong>：Registry 已起。不要把 key 放进个人 scratch。</p>
+    </article>
+
+    <p class="note">联调提醒：adapter 必须等 Registry 起来再拉，否则 enroll 心跳会 Connection refused。共享变量 <code>SUNNY_REGISTRY_URL</code>、<code>SUNNY_ADMIN_TOKEN</code>、<code>SUNNY_ENROLL_TOKEN</code> 跨进程保持一致。</p>
+    <p class="foot">对照合同：<a href="../specs/adapter.md">adapter.md</a>、<a href="../specs/registry-api.md">registry-api.md</a>、<a href="../specs/mcp-discovery.md">mcp-discovery.md</a>。接口分组见 <a href="api.html">API 文档</a>。</p>
+  </main>
+</body>
+</html>
