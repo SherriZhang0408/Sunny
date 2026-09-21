@@ -200,6 +200,8 @@ def test_publish_helpers_wired_into_pager():
     assert 'label: "发给智能体"' in js
     assert "代为登记" not in js
     assert "这页不登记" in js
+    assert 'href="/help/engineering.html"' in js
+    assert 'href="/help/api.html"' in js
     assert "导出说明（含令牌）" in js
     assert "publishView(r.parts[1])" in js
     assert "releasePublishGestures()" in js

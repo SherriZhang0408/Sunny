@@ -251,7 +251,7 @@ def test_login_page_markup_and_css_contract():
     assert 'agent-card-title">Card</span>' in js
     assert 'agent-card-kicker">名片' not in js
     assert 'class="login-brand-name">SUNNY<' not in js
-    assert 'class="login-foot">SUNNY · Agent Hub<' in js
+    assert 'class="login-foot">SUNNY · Agent Hub · <a href="/help/">文档门户</a></footer>' in js
     assert "/assets/login-handshake.png" in js
     assert "/api/v1/auth/login" in js
     assert "/api/v1/auth/me" in js

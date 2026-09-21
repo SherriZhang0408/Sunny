@@ -138,7 +138,7 @@ def test_hub_nav_permissions_wired():
     assert "<h1>智能体 · 名片</h1>" in js
     assert "像人类交换名片" in js
     assert 'class="login-brand-name">SUNNY<' not in js
-    assert 'class="login-foot">SUNNY · Agent Hub<' in js
+    assert 'class="login-foot">SUNNY · Agent Hub · <a href="/help/">文档门户</a></footer>' in js
     assert 'id="agent-card-btn"' in js
     assert 'id="login-dialog"' in js
     assert 'id="login-bits"' in js

@@ -174,6 +174,8 @@ def test_settings_page_contract():
     assert "保持动效" in js
     assert 'id: "btn-prefs-reset"' in js
     assert "恢复默认" in js
+    assert 'href="/help/"' in js
+    assert "不进顶栏" in js
     assert "不进账号、不影响出票" in js
     for theme in ("light", "dark", "swiss", "tactical", "shop"):
         assert 'id: "' + theme + '"' in js
