@@ -125,6 +125,10 @@ def issue_ticket(
 
 def verify_ticket(secret: str, token: str) -> Dict[str, Any]:
     payload = _unsign_payload(secret, token)
+    if payload.get("typ") == "session":
+        raise HTTPException(status_code=401, detail="not a call ticket")
+    if not payload.get("caller") or not payload.get("callee") or not payload.get("skill"):
+        raise HTTPException(status_code=401, detail="malformed ticket")
     if int(payload.get("exp") or 0) < int(time.time()):
         raise HTTPException(status_code=401, detail="ticket expired")
     return payload

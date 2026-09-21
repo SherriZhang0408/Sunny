@@ -256,6 +256,29 @@ def test_auth_helpers_reject_bad_identity():
     assert security.verify_password("nope", security.hash_password("secret-1")) is False
 
 
+def test_verify_ticket_rejects_session_and_incomplete_payload():
+    from fastapi import HTTPException
+
+    session = security.issue_session(
+        "ticket-test",
+        {"role": "admin", "user_id": "usr_admin", "username": "admin"},
+        3600,
+    )
+    with pytest.raises(HTTPException) as exc:
+        security.verify_ticket("ticket-test", session["token"])
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "not a call ticket"
+
+    incomplete = security._sign_payload(
+        "ticket-test",
+        {"iss": "sunny-registry", "caller": "lab.inspector", "exp": 2**31},
+    )
+    with pytest.raises(HTTPException) as incomplete_exc:
+        security.verify_ticket("ticket-test", incomplete)
+    assert incomplete_exc.value.status_code == 401
+    assert incomplete_exc.value.detail == "malformed ticket"
+
+
 def test_expired_and_forged_session_rejected(client):
     expired = security.issue_session(
         "ticket-test",
