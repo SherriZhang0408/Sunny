@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -42,6 +42,12 @@ from .store import Store, StoreError
 from .sweep import start_sweep
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
+SITE_DIR = Path(__file__).resolve().parents[1] / "docs" / "site"
+HELP_MEDIA = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+}
 
 
 class RegisterBody(BaseModel):
@@ -783,6 +789,41 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 None, principal, app.state.store, app.state.settings, request
             )
         return mcp.handle_jsonrpc(body, principal, app.state.store, app.state.settings, request)
+
+    if SITE_DIR.is_dir():
+        def _help_file(path: Path) -> FileResponse:
+            media = HELP_MEDIA.get(path.suffix.lower())
+            if media:
+                return FileResponse(str(path), media_type=media)
+            return FileResponse(str(path))
+
+        def _help_from_rel(rel: str) -> FileResponse:
+            root = SITE_DIR.resolve()
+            candidate = (SITE_DIR / rel).resolve()
+            try:
+                candidate.relative_to(root)
+            except ValueError:
+                raise HTTPException(status_code=404, detail="not found")
+            if candidate.is_dir():
+                candidate = candidate / "index.html"
+            if candidate.is_file():
+                return _help_file(candidate)
+            raise HTTPException(status_code=404, detail="not found")
+
+        @app.get("/help", include_in_schema=False)
+        def help_root() -> RedirectResponse:
+            return RedirectResponse(url="/help/", status_code=307)
+
+        @app.get("/help/", include_in_schema=False)
+        def help_index() -> FileResponse:
+            return _help_from_rel("index.html")
+
+        @app.get("/help/{path:path}", include_in_schema=False)
+        def help_page(path: str) -> FileResponse:
+            rel = path.rstrip("/") + "/index.html" if path.endswith("/") else path
+            if not rel:
+                rel = "index.html"
+            return _help_from_rel(rel)
 
     if WEB_DIR.is_dir():
         app.mount("/assets", StaticFiles(directory=str(WEB_DIR / "assets")), name="assets")
