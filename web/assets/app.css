@@ -1167,6 +1167,12 @@ body.is-login .main {
   font-size: 0.72rem;
   color: var(--text-muted);
 }
+.login-foot a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+.login-foot a:hover { color: var(--text-secondary); }
 dialog.login-dialog {
   border: none;
   padding: 0;

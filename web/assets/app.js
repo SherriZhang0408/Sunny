@@ -558,7 +558,7 @@
             '<span class="agent-card-hint">点击打开登录</span>' +
           "</button>" +
         "</div>" +
-        '<footer class="login-foot">SUNNY · Agent Hub</footer>' +
+        '<footer class="login-foot">SUNNY · Agent Hub · <a href="/help/">文档门户</a></footer>' +
       "</section>" +
       '<dialog class="login-dialog" id="login-dialog" aria-labelledby="login-title">' +
         '<div class="login-card">' +
@@ -1619,6 +1619,7 @@
           "<p>这页不登记。导出说明，让对方智能体自己来。局域网用下面的基址，不要写 <code>0.0.0.0</code>。</p>" +
           '<p class="mono">基址 ' + escapeHtml(publicUrl) +
             ' · <a href="/api/v1/join.md" target="_blank" rel="noopener">GET /api/v1/join.md</a></p>' +
+          '<p>人看的说明：<a href="/help/engineering.html" target="_blank" rel="noopener">工程说明</a> · <a href="/help/api.html" target="_blank" rel="noopener">API 参考</a></p>' +
           (lan ? "<p>局域网候选 " + lan + "</p>" : "") +
           '<div class="actions" style="margin-top:12px">' +
             controlBtn("导出说明", { variant: "primary", id: "export-join" }) +
@@ -1781,7 +1782,8 @@
         '<p class="settings-lead">密度改卡片和控件留白。动效管字标闪烁、登录汇聚和发布子页切换，不改出票。</p>' +
         '<div class="pref-block"><h3>密度</h3>' + prefSeg(DENSITIES, prefs.density, "density") + "</div>" +
         '<div class="pref-block"><h3>动效</h3>' + prefSeg(MOTIONS, prefs.motion, "motion") + "</div>" +
-        '<div class="actions">' + controlBtn("恢复默认", { id: "btn-prefs-reset" }) + "</div>";
+        '<div class="actions">' + controlBtn("恢复默认", { id: "btn-prefs-reset" }) + "</div>" +
+        '<p class="hint">项目介绍和工程文档在 <a href="/help/" target="_blank" rel="noopener">文档门户</a>，不进顶栏。</p>';
     }
 
     main.innerHTML =
