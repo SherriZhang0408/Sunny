@@ -494,6 +494,8 @@ html[data-motion="reduce"] .agent-card-btn {
   opacity: 1;
   transform: translate(-50%, -50%) rotate(0) scale(1);
 }
+html[data-motion="reduce"] .publish-pager,
+html[data-motion="reduce"] .publish-track { transition: none; }
 @media (prefers-reduced-motion: reduce) {
   html[data-motion="system"] .wordmark-cursor { animation: none; opacity: 1; }
   html[data-motion="system"] .login-bit { display: none; }
@@ -501,6 +503,8 @@ html[data-motion="reduce"] .agent-card-btn {
     opacity: 1;
     transform: translate(-50%, -50%) rotate(0) scale(1);
   }
+  html[data-motion="system"] .publish-pager,
+  html[data-motion="system"] .publish-track { transition: none; }
 }
 .mark {
   width: 40px; height: 40px; border-radius: var(--radius);
@@ -780,6 +784,35 @@ textarea.short { min-height: 88px; }
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+.tabs a.tab { text-decoration: none; display: inline-block; }
+.publish-tabs {
+  margin: 0 0 16px;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+.publish-tabs .tab { white-space: nowrap; flex: 0 0 auto; }
+.publish-pager {
+  overflow: hidden;
+  position: relative;
+  transition: height 0.28s ease;
+}
+.publish-pager.no-anim { transition: none; }
+.publish-track {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  transition: transform 0.32s ease;
+}
+.publish-track.no-anim { transition: none; }
+.publish-page {
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+.publish-page .panel { margin: 0; }
+.publish-page .panel h2 { margin-top: 0; }
 .tab-body { padding-top: 18px; }
 .kv { display: grid; grid-template-columns: 160px 1fr; gap: 8px 16px; font-size: var(--fs-body); }
 .kv dt { color: var(--text-secondary); }
@@ -895,6 +928,12 @@ textarea, select, input[type="text"], input[type="password"] {
   font: inherit;
 }
 textarea { min-height: 280px; font-family: var(--font-mono); font-size: var(--fs-meta); }
+textarea.card-json-input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+  white-space: pre;
+  line-height: 1.5;
+}
 
 .graph { min-height: 420px; }
 .edge-list { margin-top: 16px; overflow-x: auto; }

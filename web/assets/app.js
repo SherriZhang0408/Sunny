@@ -79,9 +79,10 @@
   }
 
   function writePrefs(patch) {
-    const next = Object.assign(readPrefs(), patch || {});
+    const merged = Object.assign(readPrefs(), patch || {});
+    const next = {};
     Object.keys(PREF_DEFAULTS).forEach(function (key) {
-      next[key] = pickEnum(next[key], PREF_ENUMS[key], PREF_DEFAULTS[key]);
+      next[key] = pickEnum(merged[key], PREF_ENUMS[key], PREF_DEFAULTS[key]);
     });
     localStorage.setItem(PREFS_KEY, JSON.stringify(next));
     applyPrefs(next);
@@ -151,6 +152,45 @@
     return { parts: parts.length ? parts : ["explore"], query };
   }
 
+  function safeLoginNext(raw, allowEmpty) {
+    let value = String(raw == null ? "" : raw).replace(/^#\/?/, "").trim();
+    if (!value) return allowEmpty ? "" : "explore";
+    if (/[:\\]/.test(value) || value.indexOf("//") >= 0) return allowEmpty ? "" : "explore";
+    const head = (value.split("?")[0] || "").split("/").filter(Boolean)[0] || "";
+    const allowed = {
+      explore: true,
+      network: true,
+      activity: true,
+      publish: true,
+      users: true,
+      settings: true,
+      agents: true,
+    };
+    if (!allowed[head]) return allowEmpty ? "" : "explore";
+    return value;
+  }
+
+  function loginHash(next) {
+    let dest = safeLoginNext(next, true);
+    if (dest === "explore") dest = "";
+    return dest ? "#/login?next=" + encodeURIComponent(dest) : "#/login";
+  }
+
+  function intendedRoutePath(r) {
+    const parts = (r && r.parts) || [];
+    if (!parts.length || parts[0] === "login") return "";
+    const qs = r.query && r.query.toString ? r.query.toString() : "";
+    if (parts[0] === "explore" && parts.length === 1 && !qs) return "";
+    return qs ? parts.join("/") + "?" + qs : parts.join("/");
+  }
+
+  function goLogin(error, next) {
+    const want = loginHash(next);
+    if ((location.hash || "") !== want) history.replaceState(null, "", want);
+    syncNav();
+    loginView(error);
+  }
+
   function badge(kind, text) {
     return '<span class="badge ' + kind + '">' + escapeHtml(text) + "</span>";
   }
@@ -202,6 +242,7 @@
           ["", "全部审批"],
           ["pending", "待审批"],
           ["rejected", "已拒绝"],
+          ["approved", "已通过"],
         ].map(function (pair) {
           const selected = approval === pair[0];
           return (
@@ -517,7 +558,7 @@
             '<span class="agent-card-hint">点击打开登录</span>' +
           "</button>" +
         "</div>" +
-        '<footer class="login-foot">SUNNY Agent Hub</footer>' +
+        '<footer class="login-foot">SUNNY · Agent Hub</footer>' +
       "</section>" +
       '<dialog class="login-dialog" id="login-dialog" aria-labelledby="login-title">' +
         '<div class="login-card">' +
@@ -592,7 +633,9 @@
         });
         closeNativeDialog(loginDialog);
         setSession(data.token, data.user);
-        render();
+        const dest = "#/" + safeLoginNext(route().query.get("next"));
+        if ((location.hash || "") === dest) render();
+        else location.hash = dest;
       } catch (e) {
         showLoginError(loginErrorText(e.message));
       }
@@ -1236,80 +1279,205 @@
     return text;
   }
 
-  async function publishView() {
-    let join = null;
-    try { join = await api("/api/v1/join"); } catch (e) { join = null; }
-    const publicUrl = join && join.public_url ? join.public_url : location.origin;
-    const lan = ((join && join.lan_urls) || []).map(function (url) {
-      return "<code>" + escapeHtml(url) + "</code>";
-    }).join(" · ");
-    const isAdmin = can("export_enroll_token");
-    main.innerHTML =
-      '<div class="hero"><div><h1>发布智能体</h1><p>' +
-        (isAdmin
-          ? "管理台填入走管理员账号；智能体主动登记走注册令牌（不写进名片）。"
-          : "开发者只能发布自己的智能体。发布后可改说明、增删技能或删除自己创建的名片。") +
-      "</p></div></div>" +
-      '<div class="panel" id="join-export">' +
-        "<h2>给其他 Agent 的接入说明</h2>" +
-        "<p>导出一份自包含 Markdown，交给另一个 Agent 按文档自注册。局域网请用下面的基址，不要把 <code>0.0.0.0</code> 写进名片。</p>" +
-        '<p class="mono">基址 ' + escapeHtml(publicUrl) +
-          ' · <a href="/api/v1/join.md" target="_blank" rel="noopener">GET /api/v1/join.md</a></p>' +
-        (lan ? "<p>局域网候选 " + lan + "</p>" : "") +
-        '<div class="actions" style="margin-top:12px">' +
-          controlBtn("导出接入说明", { variant: "primary", id: "export-join" }) +
-          (isAdmin ? controlBtn("导出含注册令牌", { id: "export-join-token" }) : "") +
-        "</div>" +
-        '<p class="error" id="join-err"></p>' +
-      "</div>" +
-      '<div class="panel"><form id="pull-form">' +
-        "<h2>从 URL 拉取名片</h2>" +
-        "<p>同事只给 sidecar 基址时用。Registry 去拉 <code>/.well-known/agent-card.json</code>，仍走 schema 与禁密钥门闩，不代发业务。</p>" +
-        "<label>Card 或 sidecar 基址</label>" +
-        '<input id="pull-url" type="url" placeholder="http://10.0.0.8:8091 或 …/.well-known/agent-card.json" />' +
-        (isAdmin
-          ? "<label>补 agent_id（可选，仅当卡上没有）</label>" +
-            '<input id="pull-agent-id" type="text" placeholder="your.org.agent" autocomplete="off" />'
-          : "") +
-        "<label>对等可见</label>" +
-        '<select id="pull-discovery">' +
-          '<option value="">沿用 Card</option>' +
-          '<option value="registered_peers">登记后对等可见</option>' +
-          '<option value="approval_required">需审批后可见</option>' +
-          '<option value="private">仅自己与管理员</option>' +
-        "</select>" +
-        '<div class="actions" style="margin-top:14px">' +
-          controlBtn("拉取登记", { variant: "primary", type: "submit" }) +
-        "</div>" +
-        '<p class="error" id="pull-err"></p>' +
-      "</form></div>" +
-      '<div class="panel"><form id="pub">' +
-        (isAdmin
-          ? "<label>登记方式</label>" +
-            '<select id="src"><option value="hub">管理台填入信息登记</option><option value="self">智能体主动登记（需注册令牌）</option></select>' +
-            '<label id="enroll-label" hidden>注册令牌</label>' +
-            '<input id="enroll" type="password" hidden />'
-          : '<input id="src" type="hidden" value="hub" />') +
-        "<label>对等可见</label>" +
-        '<select id="pub-discovery">' +
-          '<option value="registered_peers">登记后对等可见（默认）</option>' +
-          '<option value="approval_required">需审批后可见</option>' +
-          '<option value="private">仅自己与管理员</option>' +
-        "</select>" +
-        "<label>智能体名片 JSON</label><textarea id=\"card-json\" spellcheck=\"false\"></textarea>" +
-        '<div class="actions" style="margin-top:14px">' + controlBtn("登记", { variant: "primary", type: "submit" }) + "</div>" +
-        '<p class="error" id="pub-err"></p>' +
-      "</form></div>";
-    const src = document.getElementById("src");
-    const enroll = document.getElementById("enroll");
-    const enrollLabel = document.getElementById("enroll-label");
-    if (src && src.tagName === "SELECT" && enroll && enrollLabel) {
-      src.onchange = function () {
-        const self = src.value === "self";
-        enroll.hidden = !self;
-        enrollLabel.hidden = !self;
-      };
+  let publishGestures = null;
+
+  function cardJsonPlaceholder() {
+    return JSON.stringify({
+      name: "AI 数据智能体",
+      description: "对外只提供采集策略枚举查询与 ai_collect 余量查询；不开放模型调用、CVAT 建任务或现场 SQL。",
+      version: "0.1.0",
+      supportedInterfaces: [
+        {
+          url: "https://aidata.internal.example/sunny/v1",
+          protocolBinding: "HTTP+JSON",
+          protocolVersion: "1.0",
+        },
+      ],
+      capabilities: { streaming: false, pushNotifications: false },
+      defaultInputModes: ["application/json"],
+      defaultOutputModes: ["application/json"],
+      skills: [
+        {
+          id: "collect.strategy.query",
+          name: "采集策略查询",
+          description: "按 mission_name 或关键词查闭环采集策略枚举。检索域锁在策略表与 ai_collect 字典。",
+          tags: ["collect", "strategy", "readonly"],
+          examples: ["living_room 是什么采集策略"],
+          "x-sunny": {
+            data_class: "internal",
+            side_effects: "read",
+            input_schema: {
+              type: "object",
+              additionalProperties: false,
+              anyOf: [{ required: ["query"] }, { required: ["mission_name"] }],
+              properties: {
+                query: { type: "string" },
+                mission_name: { type: "string", description: "如 living_room" },
+                product_line: { type: "string", enum: ["deebot", "lawnmower"] },
+                trace_id: { type: "string" },
+              },
+            },
+            output_schema: {
+              type: "object",
+              required: ["ready", "mock", "items", "trace_id"],
+              properties: {
+                ready: { type: "boolean" },
+                mock: { type: "boolean" },
+                items: { type: "array" },
+                trace_id: { type: "string" },
+              },
+            },
+          },
+        },
+        {
+          id: "collect.volume.query",
+          name: "采集数据量查询",
+          description: "按白名单槽查询 ai_collect 余量（count）。不返回预览图，不创建 CVAT 任务。",
+          tags: ["collect", "volume", "readonly"],
+          examples: ["living_room 在机型 0gxgac 还有多少图"],
+          "x-sunny": {
+            data_class: "internal",
+            side_effects: "read",
+            input_schema: {
+              type: "object",
+              additionalProperties: false,
+              anyOf: [{ required: ["mission_name"] }, { required: ["robotType"] }],
+              properties: {
+                mission_name: { type: "string" },
+                robotType: { type: "array", items: { type: "string" } },
+                quest_name: { type: "string" },
+                trace_id: { type: "string" },
+              },
+            },
+            output_schema: {
+              type: "object",
+              required: ["ready", "mock", "count", "trace_id"],
+              properties: {
+                ready: { type: "boolean" },
+                mock: { type: "boolean" },
+                count: { type: "integer" },
+                trace_id: { type: "string" },
+              },
+            },
+          },
+        },
+      ],
+      "x-sunny": {
+        agent_id: "your.org.aidata",
+        workspace: "ecovacs.aidata",
+        discovery: "registered_peers",
+        access_tier: "S1",
+        lifecycle: "draft",
+        invoke_auth: "sunny_ticket",
+        invoke_identity: "agent_service",
+        scratch_access: "none",
+        not_exposed: ["model.invoke", "cvat.create_special_task", "hermes.chat"],
+      },
+    }, null, 2);
+  }
+
+  function applyCardJsonPlaceholder() {
+    const text = cardJsonPlaceholder();
+    const el = document.getElementById("card-json");
+    if (el) {
+      el.classList.add("card-json-input");
+      el.setAttribute("placeholder", text);
     }
+  }
+
+  function publishPages() {
+    return [
+      { id: "hub", label: "主动登记" },
+      { id: "pull", label: "网址同步" },
+      { id: "join", label: "发给智能体" },
+    ];
+  }
+
+  function resolvePublishTab(section, pages) {
+    for (let i = 0; i < pages.length; i += 1) {
+      if (pages[i].id === section) return pages[i].id;
+    }
+    return pages[0].id;
+  }
+
+  function releasePublishGestures() {
+    if (publishGestures) {
+      publishGestures.abort();
+      publishGestures = null;
+    }
+  }
+
+  function discoveryOptions(includeKeep) {
+    return (
+      (includeKeep
+        ? '<option value="">沿用 Card</option><option value="registered_peers">登记后对等可见</option>'
+        : '<option value="registered_peers">登记后对等可见（默认）</option>') +
+      '<option value="approval_required">需审批后可见</option>' +
+      '<option value="private">仅自己与管理员</option>'
+    );
+  }
+
+  function syncPublishPagerHeight(animate) {
+    const pager = document.getElementById("publish-pager");
+    const track = document.getElementById("publish-track");
+    if (!pager || !track) return;
+    const idx = Number(pager.getAttribute("data-index") || "0");
+    const page = track.children[idx];
+    if (!page) return;
+    const reduce = motionReduced() || !animate;
+    pager.classList.toggle("no-anim", reduce);
+    pager.style.height = page.offsetHeight + "px";
+  }
+
+  function applyPublishTab(tab, opts) {
+    opts = opts || {};
+    const pages = publishPages();
+    const resolved = resolvePublishTab(tab, pages);
+    const idx = pages.findIndex(function (page) { return page.id === resolved; });
+    const pager = document.getElementById("publish-pager");
+    const track = document.getElementById("publish-track");
+    if (!pager || !track || idx < 0) return resolved;
+    pager.setAttribute("data-index", String(idx));
+    pager.setAttribute("data-tab", resolved);
+    const reduce = motionReduced() || opts.animate === false;
+    track.classList.toggle("no-anim", reduce);
+    track.style.transform = "translateX(" + (-idx * 100) + "%)";
+    main.querySelectorAll(".publish-tabs .tab").forEach(function (link) {
+      const on = link.getAttribute("data-tab") === resolved;
+      link.classList.toggle("active", on);
+      link.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    Array.prototype.forEach.call(track.children, function (page, i) {
+      const on = i === idx;
+      page.classList.toggle("active", on);
+      page.setAttribute("aria-hidden", on ? "false" : "true");
+      if (page.inert !== undefined) page.inert = !on;
+    });
+    window.requestAnimationFrame(function () {
+      syncPublishPagerHeight(opts.animate !== false);
+    });
+    const want = "#/publish/" + resolved;
+    if (location.hash !== want) history.replaceState(null, "", want);
+    return resolved;
+  }
+
+  function bindPublishPager() {
+    const pager = document.getElementById("publish-pager");
+    const track = document.getElementById("publish-track");
+    if (!pager || !track) return;
+    releasePublishGestures();
+    publishGestures = new AbortController();
+    const sig = { signal: publishGestures.signal };
+    if (typeof ResizeObserver === "function") {
+      const ro = new ResizeObserver(function () { syncPublishPagerHeight(false); });
+      Array.prototype.forEach.call(track.children, function (page) { ro.observe(page); });
+      publishGestures.signal.addEventListener("abort", function () { ro.disconnect(); });
+    } else {
+      window.addEventListener("resize", function () { syncPublishPagerHeight(false); }, sig);
+    }
+  }
+
+  function bindPublishForms() {
     async function exportJoin(includeToken) {
       const err = document.getElementById("join-err");
       err.textContent = "";
@@ -1320,60 +1488,176 @@
         err.textContent = e.message;
       }
     }
-    document.getElementById("export-join").onclick = function () { exportJoin(false); };
+    const exportJoinBtn = document.getElementById("export-join");
+    if (exportJoinBtn) exportJoinBtn.onclick = function () { exportJoin(false); };
     const exportToken = document.getElementById("export-join-token");
     if (exportToken) exportToken.onclick = function () { exportJoin(true); };
-    document.getElementById("pull-form").onsubmit = async function (ev) {
-      ev.preventDefault();
-      const err = document.getElementById("pull-err");
-      err.textContent = "";
-      const url = document.getElementById("pull-url").value.trim();
-      if (!url) {
-        err.textContent = "请填写基址或 Card URL";
-        return;
-      }
-      const body = { url: url };
-      const overlay = document.getElementById("pull-agent-id");
-      if (overlay && overlay.value.trim()) body.agent_id = overlay.value.trim();
-      const pullDisc = document.getElementById("pull-discovery");
-      if (pullDisc && pullDisc.value) body.discovery = pullDisc.value;
-      try {
-        const data = await api("/api/v1/agents/pull", {
-          method: "POST",
-          body: JSON.stringify(body),
-        });
-        showOnceKey(data);
-      } catch (e) {
-        err.textContent = e.message;
-      }
+    const pullForm = document.getElementById("pull-form");
+    if (pullForm) {
+      pullForm.onsubmit = async function (ev) {
+        ev.preventDefault();
+        const err = document.getElementById("pull-err");
+        err.textContent = "";
+        const url = document.getElementById("pull-url").value.trim();
+        if (!url) {
+          err.textContent = "请填写基址或 Card URL";
+          return;
+        }
+        const body = { url: url };
+        const overlay = document.getElementById("pull-agent-id");
+        if (overlay && overlay.value.trim()) body.agent_id = overlay.value.trim();
+        const pullDisc = document.getElementById("pull-discovery");
+        if (pullDisc && pullDisc.value) body.discovery = pullDisc.value;
+        try {
+          const data = await api("/api/v1/agents/pull", {
+            method: "POST",
+            body: JSON.stringify(body),
+          });
+          showOnceKey(data);
+        } catch (e) {
+          err.textContent = e.message;
+        }
+      };
+    }
+    function bindCardForm(formId, jsonId, discoveryId, errId, source) {
+      const form = document.getElementById(formId);
+      if (!form) return;
+      form.onsubmit = async function (ev) {
+        ev.preventDefault();
+        const err = document.getElementById(errId);
+        err.textContent = "";
+        let card;
+        try { card = JSON.parse(document.getElementById(jsonId).value); }
+        catch (e) { err.textContent = "JSON 无法解析"; return; }
+        const pubDisc = document.getElementById(discoveryId);
+        if (pubDisc && pubDisc.value) {
+          if (!card["x-sunny"] || typeof card["x-sunny"] !== "object") card["x-sunny"] = {};
+          card["x-sunny"].discovery = pubDisc.value;
+        }
+        try {
+          const res = await fetch("/api/v1/agents", {
+            method: "POST",
+            headers: headers(),
+            body: JSON.stringify({ card: card, enrollment_source: source }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.detail || "登记失败");
+          showOnceKey(data);
+        } catch (e) {
+          err.textContent = e.message;
+        }
+      };
+    }
+    bindCardForm("pub", "card-json", "pub-discovery", "pub-err", "hub");
+  }
+
+  async function publishView(section) {
+    const isAdmin = can("export_enroll_token");
+    const pages = publishPages();
+    const tab = resolvePublishTab(section, pages);
+    const existing = document.getElementById("publish-shell");
+    if (existing) {
+      applyPublishTab(tab, { animate: true });
+      return;
+    }
+
+    let join = null;
+    try { join = await api("/api/v1/join"); } catch (e) { join = null; }
+    const still = route();
+    if (still.parts[0] !== "publish") return;
+    if (document.getElementById("publish-shell")) {
+      applyPublishTab(resolvePublishTab(still.parts[1], pages), { animate: true });
+      return;
+    }
+    const publicUrl = join && join.public_url ? join.public_url : location.origin;
+    const lan = ((join && join.lan_urls) || []).map(function (url) {
+      return "<code>" + escapeHtml(url) + "</code>";
+    }).join(" · ");
+
+    const tabs = pages.map(function (page) {
+      const on = page.id === tab;
+      return (
+        '<a href="#/publish/' + page.id + '" class="tab' + (on ? " active" : "") +
+        '" role="tab" data-tab="' + page.id + '" aria-selected="' + (on ? "true" : "false") +
+        '" aria-controls="publish-page-' + page.id + '" id="publish-tab-' + page.id + '">' +
+        page.label + "</a>"
+      );
+    }).join("");
+
+    const panels = {
+      hub:
+        '<form id="pub" class="form">' +
+          "<p>用当前登录账号贴名片 JSON。</p>" +
+          "<label for=\"pub-discovery\">对等可见</label>" +
+          '<select id="pub-discovery">' + discoveryOptions(false) + "</select>" +
+          "<label for=\"card-json\">智能体名片 JSON</label>" +
+          '<p class="hint">浅灰示例按 AI 数据智能体对外两技能写。改 <code>x-sunny.agent_id</code> 后再登记，不要直接用 <code>aidata.hermes</code>。</p>' +
+          '<textarea id="card-json" class="card-json-input" spellcheck="false"></textarea>' +
+          '<div class="actions" style="margin-top:14px">' +
+            controlBtn("登记", { variant: "primary", type: "submit" }) +
+          "</div>" +
+          '<p class="error" id="pub-err"></p>' +
+        "</form>",
+      pull:
+        '<form id="pull-form" class="form">' +
+          "<p>填写对方基址或名片网址，系统同步名片，不代发业务。</p>" +
+          "<label for=\"pull-url\">Card 或 sidecar 基址</label>" +
+          '<input id="pull-url" type="url" placeholder="http://10.0.0.8:8091 或 …/.well-known/agent-card.json" />' +
+          (isAdmin
+            ? "<label for=\"pull-agent-id\">补 agent_id（可选，仅当卡上没有）</label>" +
+              '<input id="pull-agent-id" type="text" placeholder="your.org.agent" autocomplete="off" />'
+            : "") +
+          "<label for=\"pull-discovery\">对等可见</label>" +
+          '<select id="pull-discovery">' + discoveryOptions(true) + "</select>" +
+          '<div class="actions" style="margin-top:14px">' +
+            controlBtn("同步登记", { variant: "primary", type: "submit" }) +
+          "</div>" +
+          '<p class="error" id="pull-err"></p>' +
+        "</form>",
+      join:
+        '<div id="join-export">' +
+          "<p>这页不登记。导出说明，让对方智能体自己来。局域网用下面的基址，不要写 <code>0.0.0.0</code>。</p>" +
+          '<p class="mono">基址 ' + escapeHtml(publicUrl) +
+            ' · <a href="/api/v1/join.md" target="_blank" rel="noopener">GET /api/v1/join.md</a></p>' +
+          (lan ? "<p>局域网候选 " + lan + "</p>" : "") +
+          '<div class="actions" style="margin-top:12px">' +
+            controlBtn("导出说明", { variant: "primary", id: "export-join" }) +
+            (isAdmin ? controlBtn("导出说明（含令牌）", { id: "export-join-token" }) : "") +
+          "</div>" +
+          '<p class="error" id="join-err"></p>' +
+        "</div>",
     };
-    document.getElementById("pub").onsubmit = async function (ev) {
-      ev.preventDefault();
-      const err = document.getElementById("pub-err");
-      err.textContent = "";
-      let card;
-      try { card = JSON.parse(document.getElementById("card-json").value); }
-      catch (e) { err.textContent = "JSON 无法解析"; return; }
-      const pubDisc = document.getElementById("pub-discovery");
-      if (pubDisc && pubDisc.value) {
-        if (!card["x-sunny"] || typeof card["x-sunny"] !== "object") card["x-sunny"] = {};
-        card["x-sunny"].discovery = pubDisc.value;
-      }
-      try {
-        const headersObj = headers();
-        if (src.value === "self" && enroll) headersObj["X-Sunny-Enroll"] = enroll.value;
-        const res = await fetch("/api/v1/agents", {
-          method: "POST",
-          headers: headersObj,
-          body: JSON.stringify({ card: card, enrollment_source: src.value }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "登记失败");
-        showOnceKey(data);
-      } catch (e) {
-        err.textContent = e.message;
-      }
-    };
+
+    const pageHtml = pages.map(function (page) {
+      const on = page.id === tab;
+      return (
+        '<section class="publish-page' + (on ? " active" : "") + '" role="tabpanel" id="publish-page-' +
+        page.id + '" data-tab="' + page.id + '" aria-labelledby="publish-tab-' + page.id +
+        '" aria-hidden="' + (on ? "false" : "true") + '">' +
+          '<div class="panel"><h2>' + escapeHtml(page.label) + "</h2>" + panels[page.id] + "</div>" +
+        "</section>"
+      );
+    }).join("");
+
+    main.innerHTML =
+      '<div class="hero"><div><h1>发布智能体</h1><p>' +
+        (isAdmin
+          ? "用当前登录账号主动登记或做网址同步。发给智能体只导出说明。"
+          : "用当前登录账号填写。之后只能改、删自己的智能体。") +
+      "</p></div></div>" +
+      '<div id="publish-shell">' +
+        '<nav class="tabs publish-tabs" role="tablist" aria-label="发布方式">' + tabs + "</nav>" +
+        '<div class="publish-pager" id="publish-pager" data-index="' +
+          pages.findIndex(function (page) { return page.id === tab; }) +
+          '" data-tab="' + tab + '">' +
+          '<div class="publish-track" id="publish-track">' + pageHtml + "</div>" +
+        "</div>" +
+      "</div>";
+
+    applyPublishTab(tab, { animate: false });
+    bindPublishForms();
+    applyCardJsonPlaceholder();
+    bindPublishPager();
   }
 
   function showOnceKey(data) {
@@ -1425,8 +1709,8 @@
       controlBtn("退出", { id: "btn-logout", size: "sm" });
     document.getElementById("btn-logout").onclick = function () {
       clearSession();
-      location.hash = "#/explore";
-      loginView();
+      if ((location.hash || "") === "#/login") render();
+      else location.hash = "#/login";
     };
   }
 
@@ -1494,14 +1778,14 @@
     } else {
       body =
         "<h2>显示</h2>" +
-        '<p class="settings-lead">密度改卡片和控件留白。动效只影响字标闪烁，不改业务。</p>' +
+        '<p class="settings-lead">密度改卡片和控件留白。动效管字标闪烁、登录汇聚和发布子页切换，不改出票。</p>' +
         '<div class="pref-block"><h3>密度</h3>' + prefSeg(DENSITIES, prefs.density, "density") + "</div>" +
         '<div class="pref-block"><h3>动效</h3>' + prefSeg(MOTIONS, prefs.motion, "motion") + "</div>" +
         '<div class="actions">' + controlBtn("恢复默认", { id: "btn-prefs-reset" }) + "</div>";
     }
 
     main.innerHTML =
-      '<div class="hero"><div><h1>设置</h1><p>主题、字体和显示只作用于这台浏览器上的管理台。</p></div></div>' +
+      '<div class="hero"><div><h1>系统设置</h1><p>主题、字体和显示只作用于这台浏览器上的管理台。</p></div></div>' +
       '<div class="settings"><nav class="settings-nav" aria-label="设置分类">' + nav +
       '</nav><section class="settings-body panel">' + body + "</section></div>";
 
@@ -1542,7 +1826,7 @@
         }) + "</td></tr>";
     }).join("");
     main.innerHTML =
-      '<div class="hero"><div><h1>账号</h1><p>管理员可创建开发者账号。开发者只能看名片，并维护自己发布的智能体。</p></div></div>' +
+      '<div class="hero"><div><h1>账号管理</h1><p>管理员可创建开发者账号。开发者只能看名片，并维护自己发布的智能体。</p></div></div>' +
       '<div class="panel"><form id="user-form" class="edit-grid">' +
         '<div><label for="nu-name">用户名</label><input id="nu-name" type="text" autocomplete="off" /></div>' +
         '<div><label for="nu-pass">密码</label><input id="nu-pass" type="password" autocomplete="new-password" /></div>' +
@@ -1596,15 +1880,26 @@
 
   async function render() {
     try {
+      const r = route();
+      if (!token() || r.parts[0] !== "publish") releasePublishGestures();
       if (!token()) {
+        if (r.parts[0] !== "login") {
+          goLogin("", intendedRoutePath(r));
+          return;
+        }
         syncNav();
-        loginView();
+        if (!document.querySelector(".login-page")) loginView();
         return;
       }
       await ensureSession();
       setGateMode(false);
       syncNav();
-      const r = route();
+      if (r.parts[0] === "login") {
+        const dest = "#/" + safeLoginNext(r.query.get("next"));
+        if ((location.hash || "") === dest) return await exploreView(r.query);
+        location.hash = dest;
+        return;
+      }
       if (r.parts[0] === "explore") return await exploreView(r.query);
       if (r.parts[0] === "network") {
         if (!can("view_graph")) return denyView("开发者不能查看调用关系。");
@@ -1614,7 +1909,7 @@
         if (!can("view_activity")) return denyView("开发者不能查看全局活动动态。");
         return await activityView(r.query);
       }
-      if (r.parts[0] === "publish") return await publishView();
+      if (r.parts[0] === "publish") return await publishView(r.parts[1]);
       if (r.parts[0] === "users") {
         if (!can("manage_users")) return denyView("只有管理员可以管理账号。");
         return await usersView();
@@ -1624,9 +1919,9 @@
       return await exploreView(r.query);
     } catch (e) {
       if (e.status === 401) {
+        releasePublishGestures();
         clearSession();
-        syncNav();
-        loginView(e.message);
+        goLogin(e.message, intendedRoutePath(route()));
         return;
       }
       setGateMode(false);
