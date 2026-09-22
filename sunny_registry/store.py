@@ -244,6 +244,10 @@ class Store:
             "enrollment_source": row["enrollment_source"],
             "lifecycle": row["lifecycle"],
             "discovery": policy.discovery_of(card, stored_discovery),
+            "collab_scope": policy.scope_of(
+                card,
+                row["collab_scope"] if "collab_scope" in row.keys() else None,
+            ),
             "approval_status": policy.approval_status_of(
                 row["approval_status"] if "approval_status" in row.keys() else None,
                 stored_discovery,
@@ -343,8 +347,8 @@ class Store:
             INSERT INTO agents(
                 agent_id, workspace, name, description, version, card_json,
                 enrollment_source, lifecycle, last_heartbeat_at, agent_key_hash,
-                created_by, discovery, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+                created_by, discovery, collab_scope, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
             """,
             (
                 agent_id,
@@ -358,6 +362,7 @@ class Store:
                 security.hash_agent_key(raw_key, self.settings.ticket_secret),
                 created_by,
                 policy.discovery_of(prepared),
+                policy.scope_of(prepared),
                 now,
                 now,
             ),
@@ -587,6 +592,10 @@ class Store:
         )
         old_status = row["approval_status"] if "approval_status" in row.keys() else None
         old_version = row["version"]
+        old_scope = policy.scope_of(
+            json.loads(row["card_json"]),
+            row["collab_scope"] if "collab_scope" in row.keys() else None,
+        )
         prepared = self._prepare_card(card, row["lifecycle"])
         prepared["x-sunny"]["agent_id"] = agent_id
         new_discovery = policy.discovery_of(prepared)
@@ -599,7 +608,7 @@ class Store:
         now = utcnow()
         self.conn.execute(
             """
-            UPDATE agents SET workspace=?, name=?, description=?, version=?, card_json=?, discovery=?, updated_at=?
+            UPDATE agents SET workspace=?, name=?, description=?, version=?, card_json=?, discovery=?, collab_scope=?, updated_at=?
             WHERE agent_id=?
             """,
             (
@@ -609,6 +618,7 @@ class Store:
                 prepared["version"],
                 json.dumps(prepared, ensure_ascii=False),
                 new_discovery,
+                policy.scope_of(prepared),
                 now,
                 agent_id,
             ),
@@ -625,6 +635,9 @@ class Store:
         self._refresh_fts(agent_id)
         if (prepared.get("version") or "") != (old_version or ""):
             self._record_card_change(agent_id, old_version or "", prepared.get("version") or "", actor)
+            self.revoke_open_tickets(agent_id, "card version changed", actor, commit=False)
+        if policy.scope_of(prepared) != old_scope:
+            self.revoke_open_tickets(agent_id, "collab scope changed", actor, commit=False)
         self.conn.commit()
         return self.get_detail(agent_id)
 
@@ -699,6 +712,7 @@ class Store:
             decided_at=now,
         )
         self._add_revision(agent_id, "reject", actor, row["enrollment_source"], card, "card rejected")
+        self.revoke_open_tickets(agent_id, "approval rejected", actor, commit=False)
         self.conn.commit()
         self.record_event(
             "card",
@@ -801,6 +815,10 @@ class Store:
         agent_id: Optional[str] = None,
         peer_visible_only: bool = False,
         limit: int = 100,
+        caller_workspace: Optional[str] = None,
+        enforce_scope: bool = False,
+        include_owned_by: Optional[str] = None,
+        include_agent_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         if since_id < 0:
             since_id = 0
@@ -823,6 +841,16 @@ class Store:
                 " AND a.lifecycle IN ('registered', 'deprecated')"
                 " AND COALESCE(a.discovery, 'registered_peers') = 'registered_peers'"
             )
+        if enforce_scope:
+            clause, scope_args = self._collab_clause(
+                "a",
+                caller_workspace,
+                False,
+                owned_by=include_owned_by,
+                self_id=include_agent_id,
+            )
+            sql += " AND " + clause
+            args.extend(scope_args)
         sql += " ORDER BY c.id ASC LIMIT ?"
         args.append(limit)
         items = [dict(row) for row in self.conn.execute(sql, args)]
@@ -851,6 +879,8 @@ class Store:
         else:
             action = "enable"
         self._add_revision(agent_id, action, actor, row["enrollment_source"], card, action)
+        if lifecycle == policy.LIFECYCLE_DISABLED:
+            self.revoke_open_tickets(agent_id, "disabled", actor, commit=False)
         self.conn.commit()
         return self.get_detail(agent_id)
 
@@ -942,6 +972,46 @@ class Store:
         summary["card"] = json.loads(row["card_json"])
         return summary
 
+    def agent_workspace(self, agent_id: Optional[str]) -> Optional[str]:
+        if not agent_id:
+            return None
+        row = self.get_row(agent_id)
+        if not row:
+            return None
+        return row["workspace"]
+
+    def _collab_clause(
+        self,
+        alias: str,
+        caller_workspace: Optional[str],
+        by_skill_or_tag: bool,
+        owned_by: Optional[str] = None,
+        self_id: Optional[str] = None,
+    ) -> Tuple[str, List[Any]]:
+        prefix = "{0}.".format(alias) if alias else ""
+        scope_col = "COALESCE({0}collab_scope, '')".format(prefix)
+        ws_col = "{0}workspace".format(prefix)
+        parts = ["{0} = ''".format(scope_col)]
+        args: List[Any] = []
+        if caller_workspace:
+            parts.append("({0} = 'household' AND {1} = ?)".format(scope_col, ws_col))
+            args.append(caller_workspace)
+            parts.append("({0} = 'cohort' AND {1} = ?)".format(scope_col, ws_col))
+            args.append(caller_workspace)
+        if by_skill_or_tag:
+            parts.append("{0} = 'cohort'".format(scope_col))
+        clause = "(" + " OR ".join(parts) + ")"
+        bypass = []
+        if owned_by:
+            bypass.append("{0}created_by = ?".format(prefix))
+            args.append(owned_by)
+        if self_id:
+            bypass.append("{0}agent_id = ?".format(prefix))
+            args.append(self_id)
+        if bypass:
+            clause = "(" + clause + " OR " + " OR ".join(bypass) + ")"
+        return clause, args
+
     def list_agents(
         self,
         include_disabled: bool = True,
@@ -955,6 +1025,8 @@ class Store:
         peer_visible_only: bool = False,
         include_owned_by: Optional[str] = None,
         include_agent_id: Optional[str] = None,
+        caller_workspace: Optional[str] = None,
+        enforce_scope: bool = False,
     ) -> List[Dict[str, Any]]:
         sql = "SELECT * FROM agents"
         clauses = []
@@ -994,6 +1066,16 @@ class Store:
                 visible.append("agent_id = ?")
                 args.append(include_agent_id)
             clauses.append("(" + " OR ".join(visible) + ")")
+        if enforce_scope:
+            clause, scope_args = self._collab_clause(
+                "",
+                caller_workspace,
+                False,
+                owned_by=include_owned_by,
+                self_id=include_agent_id,
+            )
+            clauses.append(clause)
+            args.extend(scope_args)
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " ORDER BY updated_at DESC"
@@ -1012,6 +1094,10 @@ class Store:
         workspace: Optional[str] = None,
         q: Optional[str] = None,
         only_alive: bool = True,
+        caller_workspace: Optional[str] = None,
+        enforce_scope: bool = False,
+        include_owned_by: Optional[str] = None,
+        include_agent_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         sql = """
             SELECT DISTINCT a.* FROM agents a
@@ -1041,6 +1127,16 @@ class Store:
             if clause:
                 sql += " AND " + clause
                 args.extend(q_args)
+        if enforce_scope:
+            clause, scope_args = self._collab_clause(
+                "a",
+                caller_workspace,
+                bool(skill_id or tag),
+                owned_by=include_owned_by,
+                self_id=include_agent_id,
+            )
+            sql += " AND " + clause
+            args.extend(scope_args)
         sql += " ORDER BY a.name"
         items = []
         for row in self.conn.execute(sql, args):
@@ -1249,6 +1345,39 @@ class Store:
             commit=False,
         )
         self.conn.commit()
+
+    def revoke_open_tickets(self, callee_id: str, reason: str, actor: str, commit: bool = True) -> int:
+        now = utcnow()
+        self.conn.execute(
+            """
+            UPDATE tickets
+            SET revoked_at = ?
+            WHERE callee_id = ?
+              AND (revoked_at IS NULL OR revoked_at = '')
+              AND expires_at > ?
+            """,
+            (now, callee_id, now),
+        )
+        count = int(self.conn.execute("SELECT changes()").fetchone()[0])
+        if count:
+            self.record_event(
+                "ticket",
+                actor,
+                status="denied",
+                callee_id=callee_id,
+                summary="revoked {0} open tickets ({1})".format(count, reason),
+                detail={"reason": reason, "count": count},
+                commit=False,
+            )
+        if commit:
+            self.conn.commit()
+        return count
+
+    def ticket_is_revoked(self, jti: str) -> bool:
+        row = self.conn.execute("SELECT revoked_at FROM tickets WHERE jti = ?", (jti,)).fetchone()
+        if not row:
+            return False
+        return bool(row["revoked_at"])
 
     def record_invocation(
         self,

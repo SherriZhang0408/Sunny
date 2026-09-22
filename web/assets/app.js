@@ -314,6 +314,10 @@
       private: "私有",
       approval_required: "待审批",
     },
+    scope: {
+      household: "户内",
+      cohort: "同群",
+    },
     approval: {
       none: "无需审批",
       pending: "待审批",
@@ -412,6 +416,12 @@
   function lifecycleLabel(item) {
     const lifecycle = item.lifecycle || "unknown";
     return badge(lifecycle, chipLabel("lifecycle", lifecycle));
+  }
+
+  function scopeLabel(item) {
+    const scope = item.collab_scope || "";
+    if (!scope) return "";
+    return badge(scope, chipLabel("scope", scope));
   }
 
   function discoveryLabel(item) {
@@ -650,7 +660,7 @@
       '<article class="repo" data-id="' + escapeHtml(item.agent_id) + '">' +
         '<div class="repo-head">' +
           "<div><h2>" + escapeHtml(item.name) + '</h2><div class="id mono">' + escapeHtml(item.agent_id) + "</div></div>" +
-          '<div class="badges">' + statusLabel(item) + sourceLabel(item) + discoveryLabel(item) + "</div>" +
+          '<div class="badges">' + statusLabel(item) + sourceLabel(item) + discoveryLabel(item) + scopeLabel(item) + "</div>" +
         "</div>" +
         "<p>" + escapeHtml(item.description) + "</p>" +
         '<div class="tags">' + tags + "</div>" +
@@ -738,7 +748,7 @@
           "<div><h1>" + escapeHtml(item.name) + "</h1>" +
           '<div class="id mono">' + escapeHtml(item.agent_id) + "</div>" +
           '<div class="badges">' + statusLabel(item) + sourceLabel(item) +
-          lifecycleLabel(item) + discoveryLabel(item) + "</div></div>" +
+          lifecycleLabel(item) + discoveryLabel(item) + scopeLabel(item) + "</div></div>" +
           (actionsHtml ? '<div class="actions">' + actionsHtml + "</div>" : "") +
         "</div>" +
         '<div class="tabs">' +
@@ -770,6 +780,9 @@
           "<dt>版本</dt><dd>" + escapeHtml(item.version) + "</dd>" +
           "<dt>访问档位</dt><dd>" + escapeHtml(item.access_tier || "") + "</dd>" +
           "<dt>对等可见</dt><dd>" + escapeHtml(chipLabel("discovery", item.discovery || "registered_peers")) + "</dd>" +
+          (item.collab_scope
+            ? "<dt>协作范围</dt><dd>" + escapeHtml(chipLabel("scope", item.collab_scope)) + "</dd>"
+            : "") +
           "<dt>审批</dt><dd>" + escapeHtml(chipLabel("approval", item.approval_status || "none")) +
             (item.approval_reason ? " · " + escapeHtml(item.approval_reason) : "") + "</dd>" +
           "<dt>最近心跳</dt><dd>" + datetimeHtml(item.last_heartbeat_at) + "</dd>" +

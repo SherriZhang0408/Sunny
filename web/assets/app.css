@@ -753,6 +753,8 @@ textarea.short { min-height: 88px; }
 .badge.hub { background: var(--hub-bg); color: var(--hub); }
 .badge.self { background: var(--self-bg); color: var(--self); }
 .badge.pending, .badge.approval_required { background: var(--stale-bg); color: var(--stale); }
+.badge.household { background: var(--ok-bg, var(--stale-bg)); color: var(--ok, var(--ink)); }
+.badge.cohort { background: var(--selected-bg, var(--stale-bg)); color: var(--selected, var(--ink)); }
 .badge.rejected { background: var(--danger-bg); color: var(--danger); }
 .badge.private { background: var(--badge-neutral-bg); color: var(--text-secondary); }
 .badge.approved { background: var(--ok-bg); color: var(--ok); }

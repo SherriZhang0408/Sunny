@@ -19,6 +19,9 @@ LIFECYCLE_DISABLED = "disabled"
 LIFECYCLE_DEPRECATED = "deprecated"
 KNOWN_LIFECYCLES = frozenset({LIFECYCLE_REGISTERED, LIFECYCLE_DISABLED, LIFECYCLE_DEPRECATED})
 PEER_READABLE_LIFECYCLES = frozenset({LIFECYCLE_REGISTERED, LIFECYCLE_DEPRECATED})
+SCOPE_HOUSEHOLD = "household"
+SCOPE_COHORT = "cohort"
+KNOWN_SCOPE = frozenset({SCOPE_HOUSEHOLD, SCOPE_COHORT})
 
 
 def is_peer_readable_lifecycle(lifecycle: Optional[str]) -> bool:
@@ -53,6 +56,47 @@ def discovery_of(card: Optional[Dict[str, Any]] = None, stored: Optional[str] = 
 
 def is_peer_visible(discovery: Optional[str]) -> bool:
     return discovery_of(stored=discovery) == PEER_VISIBLE_DISCOVERY
+
+
+def scope_of(card: Optional[Dict[str, Any]] = None, stored: Optional[str] = None) -> str:
+    if stored in KNOWN_SCOPE:
+        return stored
+    value = ((card or {}).get("x-sunny") or {}).get("scope") or ""
+    if value in KNOWN_SCOPE:
+        return value
+    return ""
+
+
+def same_workspace(caller_workspace: Optional[str], callee_workspace: Optional[str]) -> bool:
+    return bool(caller_workspace) and caller_workspace == callee_workspace
+
+
+def scope_visible(
+    scope: Optional[str],
+    caller_workspace: Optional[str],
+    callee_workspace: Optional[str],
+    by_skill_or_tag: bool = False,
+) -> bool:
+    """Peer directory gate. Empty scope keeps registered-peer visibility."""
+    kind = scope if scope in KNOWN_SCOPE else ""
+    if not kind:
+        return True
+    if kind == SCOPE_COHORT and by_skill_or_tag:
+        return True
+    return same_workspace(caller_workspace, callee_workspace)
+
+
+def scope_ticket_denied(
+    scope: Optional[str],
+    caller_workspace: Optional[str],
+    callee_workspace: Optional[str],
+) -> Optional[str]:
+    kind = scope if scope in KNOWN_SCOPE else ""
+    if not kind or kind == SCOPE_COHORT:
+        return None
+    if same_workspace(caller_workspace, callee_workspace):
+        return None
+    return "household scope requires the same workspace"
 
 
 def approval_status_of(stored: Optional[str], discovery: Optional[str] = None) -> str:
@@ -118,12 +162,17 @@ def can_view_agent(
     is_self: bool,
     lifecycle: str,
     discovery: Optional[str],
+    collab_scope: Optional[str] = "",
+    caller_workspace: Optional[str] = None,
+    callee_workspace: Optional[str] = None,
 ) -> bool:
     if is_admin or is_owner or is_self:
         return True
     if not is_peer_readable_lifecycle(lifecycle):
         return False
-    return is_peer_visible(discovery)
+    if not is_peer_visible(discovery):
+        return False
+    return scope_visible(collab_scope, caller_workspace, callee_workspace, by_skill_or_tag=True)
 
 
 def can_read_full_card(*, is_admin: bool, is_owner: bool, is_self: bool) -> bool:

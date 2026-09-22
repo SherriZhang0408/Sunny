@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS agents (
     agent_key_hash TEXT NOT NULL,
     created_by TEXT,
     discovery TEXT NOT NULL DEFAULT 'registered_peers',
+    collab_scope TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -64,7 +65,8 @@ CREATE TABLE IF NOT EXISTS tickets (
     skill_id TEXT NOT NULL,
     card_version TEXT,
     issued_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS invocations (
@@ -139,6 +141,10 @@ def migrate(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE agents SET discovery = 'registered_peers' WHERE discovery IS NULL")
     if "card_version" not in _column_names(conn, "tickets"):
         conn.execute("ALTER TABLE tickets ADD COLUMN card_version TEXT")
+    if "revoked_at" not in _column_names(conn, "tickets"):
+        conn.execute("ALTER TABLE tickets ADD COLUMN revoked_at TEXT")
+    if "collab_scope" not in _column_names(conn, "agents"):
+        conn.execute("ALTER TABLE agents ADD COLUMN collab_scope TEXT NOT NULL DEFAULT ''")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agents_discovery ON agents(discovery)")
     columns = _column_names(conn, "agents")
     if "probe_ok" not in columns:

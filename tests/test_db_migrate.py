@@ -61,6 +61,7 @@ def test_migrate_adds_governance_and_probe_columns(tmp_path):
         "card_source_url",
         "approval_status",
         "approval_reason",
+        "collab_scope",
     ):
         assert column in names
     row = conn.execute("SELECT * FROM agents WHERE agent_id='lab.legacy'").fetchone()

@@ -410,6 +410,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     ) -> Dict[str, Any]:
         require_viewer(principal)
         only_registered = not principal.is_admin
+        caller_ws = app.state.store.agent_workspace(principal.agent_id) if principal.is_agent else None
         items = app.state.store.list_agents(
             include_disabled=include_disabled if principal.is_admin else False,
             only_registered=only_registered,
@@ -422,6 +423,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             peer_visible_only=not principal.is_admin,
             include_owned_by=principal.user_id if principal.is_hub_user else None,
             include_agent_id=principal.agent_id if principal.is_agent else None,
+            caller_workspace=caller_ws,
+            enforce_scope=not principal.is_admin,
         )
         items = [_present_agent(principal, item) for item in items]
         return {"items": items, "count": len(items)}
@@ -429,12 +432,16 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     def _visible_detail(agent_id: str, principal: Principal) -> Dict[str, Any]:
         require_viewer(principal)
         detail = app.state.store.get_detail(agent_id)
+        caller_ws = app.state.store.agent_workspace(principal.agent_id) if principal.is_agent else None
         if not policy.can_view_agent(
             is_admin=principal.is_admin,
             is_owner=bool(principal.is_hub_user and principal.user_id and principal.user_id == detail.get("created_by")),
             is_self=bool(principal.is_agent and principal.agent_id == agent_id),
             lifecycle=detail["lifecycle"],
             discovery=detail.get("discovery"),
+            collab_scope=detail.get("collab_scope") or "",
+            caller_workspace=caller_ws,
+            callee_workspace=detail.get("workspace"),
         ):
             raise HTTPException(status_code=404, detail="agent not found")
         return detail
@@ -616,10 +623,19 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     ) -> Dict[str, Any]:
         require_viewer(principal)
         only_alive = True if not principal.is_admin else bool(alive)
+        caller_ws = app.state.store.agent_workspace(principal.agent_id) if principal.is_agent else None
         items = [
             _present_agent(principal, item)
             for item in app.state.store.search(
-                skill_id=skill, tag=tag, workspace=workspace, q=q, only_alive=only_alive
+                skill_id=skill,
+                tag=tag,
+                workspace=workspace,
+                q=q,
+                only_alive=only_alive,
+                caller_workspace=caller_ws,
+                enforce_scope=not principal.is_admin,
+                include_owned_by=principal.user_id if principal.is_hub_user else None,
+                include_agent_id=principal.agent_id if principal.is_agent else None,
             )
         ]
         hits = [item["agent_id"] for item in items]
@@ -642,11 +658,16 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         limit: int = Query(default=100),
     ) -> Dict[str, Any]:
         require_viewer(principal)
+        caller_ws = app.state.store.agent_workspace(principal.agent_id) if principal.is_agent else None
         return app.state.store.list_card_changes(
             since_id=since,
             agent_id=agent_id,
             peer_visible_only=not principal.is_admin,
             limit=limit,
+            caller_workspace=caller_ws,
+            enforce_scope=not principal.is_admin,
+            include_owned_by=principal.user_id if principal.is_hub_user else None,
+            include_agent_id=principal.agent_id if principal.is_agent else None,
         )
 
     @app.post("/api/v1/tickets")
@@ -688,6 +709,13 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="skill not on callee card")
         if not principal.is_admin:
             denied = policy.peer_ticket_denied(skill, callee.get("discovery"))
+            if not denied:
+                caller_row = app.state.store.get_row(caller)
+                denied = policy.scope_ticket_denied(
+                    callee.get("collab_scope"),
+                    caller_row["workspace"] if caller_row else None,
+                    callee.get("workspace"),
+                )
             if denied:
                 app.state.store.record_event(
                     "ticket",
@@ -734,6 +762,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             raise HTTPException(status_code=409, detail="callee is not registered")
         if policy.ticket_version_stale(payload.get("card_version"), callee["version"]):
             raise HTTPException(status_code=401, detail="ticket stale: card version changed")
+        if app.state.store.ticket_is_revoked(payload["jti"]):
+            raise HTTPException(status_code=401, detail="ticket revoked")
         return {"ok": True, "payload": payload}
 
     @app.post("/api/v1/invocations")

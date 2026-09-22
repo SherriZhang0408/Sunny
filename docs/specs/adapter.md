@@ -15,7 +15,9 @@ sunny-client（另一进程）
   → POST http://127.0.0.1:8091/sunny/invoke/<skill>
        Authorization: Bearer <ticket>
   → sidecar 向 Registry verify 票
-  → 本地执行；不上报 SQL / 预览图 / DSL
+  → 本地执行；调用未结束时按间隔再验一次
+  → 再验失败：丢掉结果，HTTP 上游关掉本次连接，对调用方 `409 ticket revoked`
+  → 不上报 SQL / 预览图 / DSL
   → Client 可选 POST /invocations 记一笔边
 ```
 
@@ -31,6 +33,7 @@ sunny-client（另一进程）
 | `SUNNY_ADMIN_TOKEN` / `SUNNY_ENROLL_TOKEN` | `sunny-dev-*` | 409 后签发 key / 首次自注册 |
 | `AIDATA_ROOT` | `~/PycharmProjects/AIDataAgent` | 有 `es_query_ai_collect.py` 才真 count |
 | `SUNNY_ADAPTER_MAPPING` | `sunny_adapter/mappings/<agent_id>.json` | 技能路由：`local` 或 HTTP。缺省文件存在则自动加载 |
+| `SUNNY_ADAPTER_REVOKE_POLL_S` | `0.25` | 调用未结束时复查验票的间隔；小于 0.05 按 0.05 |
 
 Hub 已登记同一 `agent_id` 时，sidecar **只挂接口、不改 enrollment_source**（仍是 `hub`）。
 

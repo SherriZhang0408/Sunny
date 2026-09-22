@@ -48,10 +48,10 @@
 | POST | `/api/v1/agents/{id}/reject` | 管理员拒绝。body `{reason}`；仍不可见 |
 | GET | `/api/v1/agents/{id}/revisions` | 变更历史（对等或 Hub） |
 | GET | `/api/v1/agents/{id}/revisions/{rev}` | 某一版 Card 快照（仅管理员） |
-| GET | `/api/v1/search` | `skill` `tag` `workspace` `q`；只返回 `discovery=registered_peers` 且只读、`data_class` 为 public/internal 的 skill（`registered` 与 `deprecated` 都可能命中）。**默认只要 `runtime_status=online`**。管理员可 `alive=0`。`q` 走 FTS5。`skill=` 仍是精确 id |
+| GET | `/api/v1/search` | `skill` `tag` `workspace` `q`；只返回 `discovery=registered_peers` 且只读、`data_class` 为 public/internal 的 skill（`registered` 与 `deprecated` 都可能命中）。**默认只要 `runtime_status=online`**。管理员可 `alive=0`。`q` 走 FTS5。`skill=` 仍是精确 id。`scope=household` 只在同一 `workspace`；`scope=cohort` 仅在带 `skill` 或 `tag` 时跨空间出现 |
 | GET | `/api/v1/card-changes` | Card `version` 变更流。`since` `agent_id` `limit`。对等只看见 `registered_peers` 且可读生命周期的卡。不推送 |
 | POST | `/api/v1/tickets` | 签发短时票。载荷含 `card_version`；对等不能调 private / approval_required / restricted / write |
-| POST | `/api/v1/tickets/verify` | 验票。Card `version` 变更后旧票作废 |
+| POST | `/api/v1/tickets/verify` | 验票。升版 → `401 ticket stale: card version changed`。停用、审批拒绝、升版都会作废未过期票；重新启用或改回版本后仍是 `401 ticket revoked`。弃用不清已发出的票 |
 | POST | `/api/v1/invocations` | 上报一次调用结果（画关系图） |
 | GET | `/api/v1/graph` | 节点 + 调用边 |
 | GET | `/api/v1/activity` | 管理员时间线。`kind` `trace_id` `q` `limit`（默认 80，上限 200）；搜索 / 出票 / 调用 / 名片 |

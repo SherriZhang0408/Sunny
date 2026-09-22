@@ -25,7 +25,7 @@
 |------|------------------|--------|----------|
 | `registered` | 可以（搜索仍默认只要 online） | 可以 | 可以 |
 | `deprecated` | 可以 | 否（`409 callee is deprecated`） | 可以（版本未变且未过期） |
-| `disabled` | 否（404） | 否（`409 callee is not registered`） | 否 |
+| `disabled` | 否（404） | 否（`409 callee is not registered`） | 否。停用时未过期票写入 `revoked_at`；再启用后这些旧票仍是 `401 ticket revoked` |
 
 管理员：`POST /agents/{id}/deprecate`、`/enable`（回到 `registered`）、`/disable`。已停用的卡不能直接弃用，须先启用。
 
@@ -43,9 +43,22 @@
 - 开发者 / 本 Agent **不能**把 `approval_required` 改成 `registered_peers`（`403 cannot self-approve`）。
 - 被拒后改卡且仍写 `approval_required` → 回到 `pending`（重新排队）。
 - 通过时若没改 Card `version`，旧票仍有效；若同时改了对外技能，应升版本。
+- 拒绝时作废该被调方未过期的票（`401 ticket revoked`）。再次排队通过后要重新出票。
 - Well-Known 拉取也可 overlay `discovery=approval_required`，进同一待办。
 
 管理员：`GET /api/v1/approvals?status=pending|rejected|approved`。
+
+## 协作范围
+
+可选 `x-sunny.scope`，库字段 `agents.collab_scope`。不写则空，发现和出票与原来的已登记对等相同。
+
+| 值 | 对等列表 / 无技能无标签的搜索 | `skill` 或 `tag` 搜索 | 对等出票 |
+|----|-------------------------------|----------------------|----------|
+| 空 | 已登记且可发现的都在 | 同左 | 原门闩 |
+| `household` | 仅同一 `workspace` | 仅同一 `workspace` | 调用方 `workspace` 必须相同，否则 `403 household scope requires the same workspace` |
+| `cohort` | 仅同一 `workspace` | 跨 `workspace` | 跨 `workspace` 可以 |
+
+管理员不受限。创建者和本智能体始终能读自己的卡。范围一变，该被调方未过期票作废（`collab scope changed`）。直接按 `agent_id` 打开 `cohort` 名片可以；`household` 跨空间对等打开是 404。
 
 ## 技能
 
@@ -58,5 +71,7 @@
 ## 票
 
 载荷除 caller / callee / skill / TTL 外带 `card_version`（被调方当前 Card `version`）。验票时版本对不上或缺版本 → `401 ticket stale: card version changed`。
+
+停用、审批拒绝、Card `version` 变化时，该被调方未过期且尚未作废的票写入 `revoked_at`。升版的验票文案仍是版本过期；停用中的验票文案仍是未登记。重新启用或把版本改回去之后，这些票是 `401 ticket revoked`，不会复活。弃用不作废已发出的票。活动里记一条 `ticket` / `denied`，只含原因和张数，不含票本身。
 
 Card `version` 变化写入 `card_changes`。对等轮询 `GET /api/v1/card-changes?since=`（或 MCP `list_card_changes`）。Registry **不推送**、不回调对方进程。

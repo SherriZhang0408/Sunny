@@ -65,6 +65,7 @@
 | `agent_id` | `aidata.hermes` | 稳定主键，点号分段 |
 | `workspace` | 非空字符串 | 服务工作区标签；P0 不分三级（ADR-002） |
 | `discovery` | `registered_peers` / `private` / `approval_required` | 默认 `registered_peers`（ADR-001 §3）。`private` 不对对等开放。`approval_required` 须管理员通过后才变成 `registered_peers`；见 [policy.md](./policy.md) |
+| `scope` | 不写 / `household` / `cohort` | 可选。不写保持已登记对等可见。`household` 只对同一 `workspace` 可见、可出票。`cohort` 按技能或标签跨空间发现，出票不限空间 |
 | `access_tier` | `S0` / `S1` / `S2` | 纯登记 / sidecar / 原生 A2A |
 | `lifecycle` | `draft` / `registered` / `deprecated` / `disabled` | 登记后由 Registry 维护。`deprecated` 能读不能出新票；`disabled` 对等不可见 |
 | `not_exposed` | 字符串数组 | 内部有、对外禁挂的 skill 或能力 |

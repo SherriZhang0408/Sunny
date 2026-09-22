@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Dict, Optional
 
 import httpx
@@ -20,6 +21,7 @@ def invoke_skill(
     settings: AdapterSettings,
     card: Optional[Dict[str, Any]] = None,
     upstream: Optional[httpx.Client] = None,
+    cancel: Optional[threading.Event] = None,
 ) -> Dict[str, Any]:
     card = card if card is not None else load_card(settings)
     known = [skill.get("id") for skill in (card.get("skills") or [])]
@@ -36,7 +38,7 @@ def invoke_skill(
         if route.get("handler") == "http":
             if upstream is None:
                 raise MappingError("http route needs an upstream client")
-            return forward(route, slots, skill_id, upstream)
+            return forward(route, slots, skill_id, upstream, cancel=cancel)
         return dispatch(skill_id, slots, settings)
 
     return dispatch(skill_id, slots, settings)

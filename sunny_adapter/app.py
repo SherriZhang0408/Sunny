@@ -16,7 +16,7 @@ from .config import AdapterSettings
 from .enroll import enroll, load_card
 from .invoke import invoke_skill
 from .mapping import MappingError, load_mapping
-from .proxy import probe_downstream
+from .proxy import TicketRevoked, probe_downstream
 from .slots import SlotError
 
 
@@ -148,16 +148,46 @@ def create_adapter_app(
         slots = dict(body.slots or {})
         if body.trace_id and not slots.get("trace_id"):
             slots["trace_id"] = body.trace_id
-        try:
-            return invoke_skill(skill_id, slots, settings, upstream=upstream)
-        except KeyError:
-            raise HTTPException(status_code=404, detail="skill not hosted: {0}".format(skill_id))
-        except SlotError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
-        except MappingError as exc:
-            raise HTTPException(status_code=503, detail=str(exc))
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+        cancel = threading.Event()
+        box: Dict[str, Any] = {}
+
+        def run() -> None:
+            try:
+                box["result"] = invoke_skill(
+                    skill_id,
+                    slots,
+                    settings,
+                    upstream=upstream,
+                    cancel=cancel,
+                )
+            except TicketRevoked:
+                box["revoked"] = True
+            except KeyError:
+                box["error"] = HTTPException(status_code=404, detail="skill not hosted: {0}".format(skill_id))
+            except SlotError as exc:
+                box["error"] = HTTPException(status_code=400, detail=str(exc))
+            except MappingError as exc:
+                box["error"] = HTTPException(status_code=503, detail=str(exc))
+            except ValueError as exc:
+                box["error"] = HTTPException(status_code=400, detail=str(exc))
+
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        while worker.is_alive():
+            worker.join(settings.revoke_poll_s)
+            if not worker.is_alive():
+                break
+            try:
+                _verify_ticket(settings, client, token, skill_id)
+            except HTTPException:
+                cancel.set()
+                break
+        worker.join(timeout=5)
+        if cancel.is_set() or box.get("revoked"):
+            raise HTTPException(status_code=409, detail="ticket revoked")
+        if box.get("error") is not None:
+            raise box["error"]
+        return box.get("result") or {}
 
     return app
 

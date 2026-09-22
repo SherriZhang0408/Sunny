@@ -45,10 +45,12 @@
 |------|------|
 | [可行性、需求、竞品与模块拆解](./research/SUNNY-AgentHub-可行性与前期需求.md) | 选型 B、模块切分、M0–M5 |
 | [多 Agent 行业口径与现网对照](./research/多Agent协作-行业口径与现网对照.md) | 同机/跨机、发现≠访问 |
+| [注册机制对具身协作的启发](./research/注册机制-跨户与户内协作.md) | 跨户同类型策略群、户内不同设备直连；可抽象的建设原则 |
 | [同类项目对照](./research/同类项目对照.md) | 控制面近亲、可借鉴点（开源仓 / 规格 / 厂商文档）；交互画布只在 Cursor canvases，不进仓 |
 | [Well-Known 拉取（一周计划，已落地）](./plans/week-well-known-pull.md) | S0 只交基址拉 Card |
 | [审批流（一周计划，已落地）](./plans/week-approval-flow.md) | `approval_required` 真审批 |
 | [弃用 + 升版变更流](./plans/week-deprecated-subscribe.md) | `deprecated` 能读不能出新票；`card-changes` 拉取 |
+| [协作范围 scope](./plans/week-collab-scope.md) | 可选 `household` / `cohort`；不写则保持已登记对等可见 |
 | [接入 ChatBI 的条件](./research/AI数据智能体接入ChatBI-条件.md) | 三档接入、禁止整段转发 |
 
 ## 还没做（刻意）

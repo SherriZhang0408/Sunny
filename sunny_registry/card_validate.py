@@ -111,6 +111,8 @@ def structural_checks(card: dict) -> List[str]:
                 errors.append("x-sunny missing {0}".format(field))
         if not sunny.get("not_exposed"):
             errors.append("x-sunny.not_exposed must list at least one internal capability")
+        if "scope" in sunny and sunny.get("scope") not in {"household", "cohort"}:
+            errors.append("x-sunny.scope must be household or cohort")
     return errors
 
 

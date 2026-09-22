@@ -33,6 +33,9 @@ class AdapterSettings:
         self.agent_key = _env("SUNNY_AGENT_KEY", "")
         self.key_path = Path(_env("SUNNY_ADAPTER_KEY_FILE", str(ROOT / "data" / "adapter-keys" / (self.agent_id + ".key"))))
         self.heartbeat_s = int(_env("SUNNY_ADAPTER_HEARTBEAT_S", "30"))
+        self.revoke_poll_s = float(_env("SUNNY_ADAPTER_REVOKE_POLL_S", "0.25"))
+        if self.revoke_poll_s < 0.05:
+            self.revoke_poll_s = 0.05
         self.aidata_root = Path(_env("AIDATA_ROOT", "/home/zhangshuang/PycharmProjects/AIDataAgent"))
         self.enrollment_source = _env("SUNNY_ADAPTER_ENROLLMENT", "self")
         mapping_default = default_mapping_path(ROOT, self.agent_id)

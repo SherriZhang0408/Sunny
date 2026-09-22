@@ -340,12 +340,16 @@ def _catalog_item(
 def _visible_detail(store, principal: Principal, agent_id: str) -> Dict[str, Any]:
     require_viewer(principal)
     detail = store.get_detail(agent_id)
+    caller_ws = store.agent_workspace(principal.agent_id) if principal.is_agent else None
     if not policy.can_view_agent(
         is_admin=principal.is_admin,
         is_owner=bool(principal.is_hub_user and principal.user_id and principal.user_id == detail.get("created_by")),
         is_self=bool(principal.is_agent and principal.agent_id == agent_id),
         lifecycle=detail["lifecycle"],
         discovery=detail.get("discovery"),
+        collab_scope=detail.get("collab_scope") or "",
+        caller_workspace=caller_ws,
+        callee_workspace=detail.get("workspace"),
     ):
         raise HTTPException(status_code=404, detail="agent not found")
     return detail
@@ -359,6 +363,7 @@ def _call_list(
     request: Request,
 ) -> Dict[str, Any]:
     require_viewer(principal)
+    caller_ws = store.agent_workspace(principal.agent_id) if principal.is_agent else None
     items = []
     for item in store.list_agents(
         include_disabled=False,
@@ -368,6 +373,8 @@ def _call_list(
         peer_visible_only=not principal.is_admin,
         include_owned_by=principal.user_id if principal.is_hub_user else None,
         include_agent_id=principal.agent_id if principal.is_agent else None,
+        caller_workspace=caller_ws,
+        enforce_scope=not principal.is_admin,
     ):
         if item.get("runtime_status") != "online":
             continue
@@ -378,6 +385,9 @@ def _call_list(
             is_self=bool(principal.is_agent and principal.agent_id == item["agent_id"]),
             lifecycle=detail["lifecycle"],
             discovery=detail.get("discovery"),
+            collab_scope=detail.get("collab_scope") or "",
+            caller_workspace=caller_ws,
+            callee_workspace=detail.get("workspace"),
         ):
             continue
         card = public_card(detail.get("card") if isinstance(detail.get("card"), dict) else {})
@@ -392,6 +402,7 @@ def _call_list(
 def _call_search(store, principal: Principal, arguments: Dict[str, Any]) -> Dict[str, Any]:
     require_viewer(principal)
     only_alive = True
+    caller_ws = store.agent_workspace(principal.agent_id) if principal.is_agent else None
     items = [
         _sanitize_search_item(item)
         for item in store.search(
@@ -400,6 +411,10 @@ def _call_search(store, principal: Principal, arguments: Dict[str, Any]) -> Dict
             workspace=arguments.get("workspace") or None,
             q=arguments.get("q") or None,
             only_alive=only_alive,
+            caller_workspace=caller_ws,
+            enforce_scope=not principal.is_admin,
+            include_owned_by=principal.user_id if principal.is_hub_user else None,
+            include_agent_id=principal.agent_id if principal.is_agent else None,
         )
     ]
     return {"items": items, "count": len(items)}

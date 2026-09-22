@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import uuid
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
@@ -9,6 +10,10 @@ from urllib.parse import urlparse
 import httpx
 
 from .mapping import MappingError, apply_map, expand_env
+
+
+class TicketRevoked(Exception):
+    """Call ticket was revoked while the upstream request was still running."""
 
 
 def _trace(slots: dict) -> str:
@@ -22,12 +27,25 @@ def _safe_url(url: str) -> str:
     return url
 
 
+def _uses_mock_transport(client: httpx.Client) -> bool:
+    transport = getattr(client, "_transport", None)
+    return type(transport).__name__ == "MockTransport"
+
+
+def _arm_close(cancel: threading.Event, client: httpx.Client, finished: threading.Event) -> None:
+    while not finished.wait(0.05):
+        if cancel.is_set():
+            client.close()
+            return
+
+
 def forward(
     route: Dict[str, Any],
     slots: Dict[str, Any],
     skill_id: str,
     client: httpx.Client,
     environ: Optional[Dict[str, str]] = None,
+    cancel: Optional[threading.Event] = None,
 ) -> Dict[str, Any]:
     trace = _trace(slots)
     url = _safe_url(expand_env(route["url"], environ))
@@ -37,15 +55,34 @@ def forward(
     for key, value in (route.get("headers") or {}).items():
         headers[key] = expand_env(value, environ)
     body = apply_map(slots, skill_id, route.get("map"))
+    own = client
+    close_own = False
+    finished = threading.Event()
+    if (
+        cancel is not None
+        and isinstance(client, httpx.Client)
+        and not _uses_mock_transport(client)
+    ):
+        own = httpx.Client(timeout=timeout)
+        close_own = True
+        threading.Thread(target=_arm_close, args=(cancel, own, finished), daemon=True).start()
     try:
-        res = client.request(method, url, json=body, headers=headers, timeout=timeout)
+        res = own.request(method, url, json=body, headers=headers, timeout=timeout)
     except httpx.HTTPError:
+        if cancel is not None and cancel.is_set():
+            raise TicketRevoked("ticket revoked")
         return {
             "ready": False,
             "mock": False,
             "trace_id": trace,
             "message": "upstream request failed",
         }
+    finally:
+        finished.set()
+        if close_own:
+            own.close()
+    if cancel is not None and cancel.is_set():
+        raise TicketRevoked("ticket revoked")
     if res.status_code >= 400:
         return {
             "ready": False,

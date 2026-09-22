@@ -184,7 +184,7 @@ def test_hub_entry_points_point_at_help():
     assert 'href="/help/" target="_blank" rel="noopener">文档门户</a>，不进顶栏' in js
     assert 'data-nav="help"' not in html
     assert ">文档门户</a>" not in html
-    assert "/assets/app.js?v=49" in html
+    assert "/assets/app.js?v=50" in html
     assert "/assets/app.css?v=55" in html
     assert ".login-foot a" in css
     assert "function settingsView" in js

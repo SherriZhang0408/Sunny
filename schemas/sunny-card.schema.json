@@ -367,6 +367,11 @@
           "enum": ["registered_peers", "private", "approval_required"],
           "description": "registered_peers = 已登记 Agent 默认可互发现（ADR-001）。"
         },
+        "scope": {
+          "type": "string",
+          "enum": ["household", "cohort"],
+          "description": "可选协作范围。household 只对同一 workspace 可见可出票。cohort 按技能或标签跨 workspace 发现，出票不限 workspace。不写则保持已登记对等可见。"
+        },
         "access_tier": {
           "type": "string",
           "enum": ["S0", "S1", "S2"]
