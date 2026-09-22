@@ -648,6 +648,26 @@ a.card:hover { transform: translateY(-2px); border-color: #b7c6d4; }
   font: 0.75rem var(--mono);
 }
 
+.capability-figure {
+  margin: 22px 0 0;
+  overflow-x: auto;
+  border-radius: 12px;
+  background: #061018;
+}
+.capability-figure svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.capability-figure.map svg { min-width: 880px; }
+.capability-figure.graph svg { min-width: 640px; }
+.capability-figure figcaption {
+  margin: 0;
+  padding: 8px 12px 10px;
+  color: #8aa4b8;
+  font-size: 0.82rem;
+}
+
 .journey {
   list-style: none;
   margin: 24px 0 0;
@@ -953,4 +973,12 @@ pre code { background: none; color: inherit; padding: 0; }
   .audience-panels, .impact-row, .next-grid, .ra-callers, .ra-targets {
     break-inside: avoid;
   }
+  .capability-model { break-inside: auto; }
+  .capability-figure {
+    overflow: visible;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .capability-figure svg { min-width: 0; }
 }
