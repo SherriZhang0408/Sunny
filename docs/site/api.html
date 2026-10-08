@@ -85,7 +85,7 @@
       </table>
 <pre><code>curl -sS http://127.0.0.1:8088/api/v1/health
 curl -sS -H "X-Sunny-Agent-Key: sak_…" \
-  "http://127.0.0.1:8088/api/v1/search?skill=collect.strategy.query"</code></pre>
+  "http://127.0.0.1:8088/api/v1/search?skill=echo.ping"</code></pre>
       <p>常见错误：未登录/无 key → 401；对等看不见 private / 待审批 → 404；搜索无命中 → <code>items: []</code>。</p>
     </section>
 
@@ -127,12 +127,12 @@ curl -sS -X POST http://127.0.0.1:8088/api/v1/agents/pull \
 <pre><code>curl -sS -X POST http://127.0.0.1:8088/api/v1/tickets \
   -H "X-Sunny-Agent-Key: sak_…" \
   -H "Content-Type: application/json" \
-  -d '{"callee_id":"aidata.hermes","skill_id":"collect.strategy.query"}'
+  -d '{"callee_id":"lab.echo","skill_id":"echo.ping"}'
 
-curl -sS -X POST http://127.0.0.1:8091/sunny/invoke/collect.strategy.query \
+curl -sS -X POST http://127.0.0.1:8093/sunny/invoke/echo.ping \
   -H "Authorization: Bearer &lt;ticket&gt;" \
   -H "Content-Type: application/json" \
-  -d '{"slots":{"mission_name":"living_room"},"trace_id":"demo-1"}'</code></pre>
+  -d '{"slots":{"query":"hello"},"trace_id":"demo-1"}'</code></pre>
       <p>常见错误：private / 待审批 / restricted / write → 对等 403；<code>deprecated</code> 或 <code>disabled</code> 拒新票 → 409；技能不在卡上 → 404；槽校验失败 → sidecar 400。票明文只在签发响应里出现一次，活动页最多留 <code>jti</code>。</p>
     </section>
 

@@ -219,12 +219,12 @@ curl -sS -X POST 'http://<registry-host>:8088/api/v1/agents/your.org.agent/heart
 搜索并要票（用你的 `sak_`）：
 
 ```bash
-curl -sS 'http://<registry-host>:8088/api/v1/search?skill=collect.strategy.query' \
+curl -sS 'http://<registry-host>:8088/api/v1/search?skill=echo.ping' \
   -H 'X-Sunny-Agent-Key: sak_…'
 curl -sS -X POST 'http://<registry-host>:8088/api/v1/tickets' \
   -H 'Content-Type: application/json' \
   -H 'X-Sunny-Agent-Key: sak_…' \
-  -d '{"callee_id":"aidata.hermes","skill_id":"collect.strategy.query"}'
+  -d '{"callee_id":"lab.echo","skill_id":"echo.ping"}'
 ```
 
 拿到票后：

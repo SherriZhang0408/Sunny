@@ -7,7 +7,7 @@
 | 日期 | 2026-09-18 |
 | 性质 | 立项前调研（需求整理 + 竞品 + 工程拆解，不是实现规格） |
 | 检索 | AnySearch `api.anysearch.com` 当日不可达；改用公开网页交叉核对（A2A 规范、云厂商文档、开源仓库） |
-| 首批接入 | AI DATA AGENT（Hermes）；下一候选 ChatBI Gateway `:8095` |
+| 首批接入 | 已有 HTTP 的业务 Agent；本仓示例是 `lab.echo` |
 
 > 一句话：  
 > **可行，而且现在就该做——但 SUNNY 一期只做「企业内策展型注册中心 + 薄适配器」，不要做公网 Agent 市场，也不要逼业务 Agent 改造成完整 A2A。**  
@@ -19,12 +19,12 @@
 
 ## 0. 问题怎么框
 
-你已经试过「数据智能体用 API 去调别的智能体」。痛点不是 HTTP 调不通，而是：
+企业里已经有多个能独立决策的智能体，HTTP 也能打通。痛点不是调不通，而是：
 
 1. **每次对接都是点对点**：基址、鉴权、槽位、失败语义写死在调用方。
 2. **对方一换接口，调用方全改**；新 Agent 进来没有标准「怎么介绍自己」。
-3. **能力在对方脑子里，不在目录里**：Hermes 不知道 ChatBI 有哪些模板，ChatBI 也不知道数据智能体有哪些 Skill。
-4. **你希望别人改动尽量小**：同事不会为了接入把 ChatBI 重写成 A2A Server。
+3. **能力在对方脑子里，不在目录里**：调用方不知道对方有哪些已批准技能。
+4. **你希望别人改动尽量小**：同事不会为了接入把业务进程重写成 A2A Server。
 
 所以 SUNNY 要解决的是 **控制面**（谁在、会什么、谁看得见、版本与心跳），不是再造一套对话运行时。
 
@@ -32,11 +32,11 @@
 
 | 标准 | 过线 |
 |------|------|
-| 首批接入 | 数据智能体用 sidecar 挂上名片，**不改 Hermes 内核** |
+| 首批接入 | 业务 Agent 用 sidecar 挂上名片，**不改业务内核** |
 | 发现 | 另一个进程能按 skill / tag 查到它，拿到调用入口 |
 | 低改动 | 现有 HTTP Agent 只加一份 Card JSON + 可选 sidecar，不重写业务 |
 | 安全 | 看见名片 ≠ 能调用；技能级授权；不把密钥写进 Card |
-| 边界 | 不替代包装器、不替代 ChatBI Guard、不替代壳层 RBAC |
+| 边界 | 不替代对方的鉴权、数据权限和业务执行 |
 
 ---
 
@@ -50,9 +50,9 @@
 | 用名片做发现 | **对** | Card 就是「数字名片」：身份、技能、入口、鉴权方案。v1.0 必填：`name` `description` `version` `supportedInterfaces` `capabilities` `defaultInputModes` `defaultOutputModes` `skills[]`。 |
 | 必须先上完整 A2A 线协议 | **否** | Google Cloud Agent Registry 同时收 `A2A_AGENT_CARD` 和 `NO_SPEC` REST。业界已经承认：先登记入口，再逐步讲 A2A。 |
 | 必须自建调用网关 | **一期不必** | 注册表返回 Card；调用仍打到 Agent 自己的 URL。网关是数据面（审计、限流），和目录是两件事。agentgateway 这类项目证明二者可拆。 |
-| 接入必须大改业务 Agent | **否，这是风险点也是设计点** | 薄适配器 / sidecar：对外出 Card + `message/send` 或 REST invoke，对内转现有 HTTP。ChatBI 继续 `/v1/chat`，Hermes 继续 Skill。 |
+| 接入必须大改业务 Agent | **否，这是风险点也是设计点** | 薄适配器 / sidecar：对外出 Card + REST invoke，对内转现有 HTTP。业务进程保持原样。 |
 | 做成公网市场 | **不做** | a2a-registry.org、AgoraHub 面向公网发现与「Meta Agent 路由」。公司内网要的是策展、审批、隔离，不是 DNS 验证上架。 |
-| 和现网合同冲突吗 | **不冲突，若边界守住** | 数据智能体仍禁止现场拼 SQL、Chat 不泄 SQL、融合走包装器。SUNNY 只让「已批准的技能」被发现；执行权仍在各 Agent。 |
+| 和现网合同冲突吗 | **不冲突，若边界守住** | SUNNY 只让「已批准的技能」被发现；执行权仍在各 Agent。 |
 
 行业里一句必须留下的话（A2A 官方 + Microsoft 同构）：
 
@@ -62,16 +62,16 @@
 
 | 昨天的判断 | 今天怎么用 |
 |------------|------------|
-| 多 Agent 是逻辑关系，主路径仍是同机 Hermes | SUNNY **不拆** Hermes 内部子代理；它管的是 **跨运行时** |
-| A2A 出现第二套 Agent 时再评估 | ChatBI 已独立开放，评估窗口到了；评估结果是 **先做目录，后做 A2A 线协议** |
-| 接 ChatBI 要显式 action / 槽 / 不整段转发 | 写进 Card 的 `skills[]`，而不是只写一句「我会问数」 |
+| 多 Agent 是逻辑关系，主路径可以仍在各自运行时 | SUNNY **不拆** 对方内部子代理；它管的是 **跨运行时** |
+| 出现第二套 Agent 时再评估 | 评估结果是 **先做目录，后做 A2A 线协议** |
+| 接入要显式 action / 槽 / 不整段转发 | 写进 Card 的 `skills[]`，而不是只写一句「我会聊天」 |
 | 发现 ≠ 访问 | SUNNY 的第一原则 |
 
 ### 1.3 主要风险（先写，避免后半段膨胀）
 
 1. **目录变成第二个编排器**：模型在 SUNNY 里「随便找个 Agent 聊聊」。必须按 skill id 调用，禁止无 skill 的自由对话作为默认路径。
 2. **Card 写得太虚**：`description` 很长、`skills` 只有一条「通用问答」→ 发现废了。技能必须对应可测的入口（模板 ID、包装器、action）。
-3. **借 Hub 提权**：融合侧没有 Hive 行权限，却通过「发现了 ChatBI」去执行 SQL。策略层要能拒绝。
+3. **借 Hub 提权**：调用方没有某项数据权限，却通过「发现了对方」去执行写操作或查询。策略层要能拒绝。
 4. **协议版本坑**：A2A v1.0 把顶层 `url` 收进 `supportedInterfaces[]`；不少实现还停在 0.3。SUNNY 对内用一份规范 Card，对外兼容两代字段。
 5. **范围膨胀**：联邦 DHT（AGNTCY）、Agent 365 式身份治理、公网收录，都不是 P0。
 
@@ -83,24 +83,23 @@
 
 | 角色 | 要什么 |
 |------|--------|
-| 数据智能体（首批） | 需要仓侧圈选 / 问数时，能发现 ChatBI 的 **已批准技能**，按槽调用，自己继续做图侧与融合 |
-| ChatBI（第二批） | 尽量不改 Gateway；最多加 Card + sidecar。需要时发现「图像 / 场景」技能，而不是重写 CVAT |
-| 未来 Agent 主人（算法 / 客服 / 标注） | 一份 YAML/JSON + 心跳，就能上架；审批通过才被搜到 |
+| 调用方 Agent | 按技能发现对方的 **已批准技能**，按槽调用，自己的业务流程留在原处 |
+| 被调方 Agent | 尽量不改业务进程；最多加 Card + sidecar |
+| 未来 Agent 主人 | 一份 YAML/JSON + 心跳，就能上架；审批通过才被搜到 |
 | 平台值守 | 看到谁在线、谁调了谁、哪张 Card 过期、哪个技能被禁用 |
 | 安全 / 合规 | 工作空间隔离；敏感技能只给认证后的 Extended Card |
 
 优先场景（P0 只做前两条）：
 
-1. **登记**：数据智能体上架 1–3 个只读技能（建议 `kb.retrieve`、后续 `db.query_by_device` 仍 mock 也可先不上）。
-2. **发现**：本机另一个 client 按 tag `warehouse` / `scene` 查到 Card。
-3. **调用（P0.5）**：client 按 skill id 打到 sidecar，sidecar 转 Hermes/包装器已有入口；回 `trace_id`。
-4. **第二 Agent**：ChatBI 上架 1 个 L1 模板技能（显式模板 ID + 槽），数据智能体发现并调用。
-5. **拒绝路径**：未授权 skill、无身份、ChatBI clarify、Guard 失败 → 调用方降级，不自动改道 L3。
+1. **登记**：一个 Agent 上架 1–3 个已契约化的技能。
+2. **发现**：本机另一个 client 按 skill / tag 查到 Card。
+3. **调用（P0.5）**：client 按 skill id 打到 sidecar，sidecar 转对方已有 HTTP；回 `trace_id`。
+4. **第二 Agent**：再挂一个独立进程（本仓后来用 `lab.echo`），调用方发现并调用。
+5. **拒绝路径**：未授权 skill、无身份、对方拒绝 → 调用方降级，不自动改道去执行写操作。
 
 非目标（写进 Charter 红线）：
 
-- 不替代 Hermes 对话循环、不替代 `modules/orchestrator` DAG
-- 不替代 ChatBI L1/L2/L3 车道
+- 不替代对方的对话循环和业务编排
 - 不做公网收录、不做加密货币 / x402 结算
 - 不把 MCP 工具目录和 Agent 目录混成一张无类型表（可并存，类型必须分开）
 
@@ -129,7 +128,7 @@
 - 完整 A2A `SendMessage` / Task 生命周期
 - 数据面网关（限流、统一审计、mTLS 终结）
 - MCP Bridge：把已批准 Agent 技能暴露成 MCP tool（AgoraHub 同款，二期）
-- 语义检索 Card（向量搜「谁会圈宠物家」）
+- 语义检索 Card（向量搜「谁会做某类事」）
 
 **Won't（一期）**
 
@@ -144,22 +143,22 @@
 | 档 | 对方要做什么 | SUNNY 怎么对待 | 适合谁 |
 |----|--------------|----------------|--------|
 | **S0 纯登记** | 交一份 Card JSON（可手写），填 `supportedInterfaces` 为现有 REST | 可发现；调用方按 Card 里的 REST 自己调 | 最懒的同事；Google 的 `NO_SPEC` |
-| **S1 sidecar** | 不改业务；旁边跑 `sunny-adapter`，读映射文件 | 对外统一 invoke；对内转 HTTP | **默认推荐**。Hermes、ChatBI |
+| **S1 sidecar** | 不改业务；旁边跑 `sunny-adapter`，读映射文件 | 对外统一 invoke；对内转 HTTP | **默认推荐** |
 | **S2 原生 A2A** | 自己实现 Card + JSON-RPC | 原样收录 | 将来新写的 Agent |
 
 S1 映射文件（示意，不是最终 schema）：
 
 ```yaml
-agent_id: aidata.hermes
-card: ./cards/aidata.json          # 或从资产卡生成
+agent_id: lab.echo
+card: ./cards/lab.echo.sample.json
 routes:
-  - skill_id: kb.retrieve
+  - skill_id: echo.ping
     method: POST
-    url: ${HERMES_WEBUI}/api/...   # 活库，不进 Git
+    url: ${ECHO_URL}/v1/echo
     map:
-      query: $.slots.query
+      q: $.slots.query
 heartbeat:
-  url: ${HERMES_WEBUI}/health
+  url: ${ECHO_URL}/health
   interval_s: 30
 ```
 
@@ -171,7 +170,7 @@ heartbeat:
 4. `execute_sql` / `write` 默认不进跨 Agent 搜索，除非策略白名单
 5. 禁止 Card 内出现 token、密码、连接串
 
-数据智能体首张名片建议 **只暴露只读、已契约化的技能**，不要把整个 Hermes Chat 挂上去。
+首张名片建议 **只暴露已契约化的技能**，不要把整个对话入口挂上去。
 
 ---
 
@@ -205,17 +204,17 @@ SUNNY 一期站在 **控制面**，用 sidecar 轻轻碰数据面。不要一上
 | **AgoraHub** | A2A 目录 + MCP Bridge + 信任分 | MCP Bridge 可列为 Could | 信任分、公开匹配算法当主路径 |
 | **Spring AI Alibaba A2A** | ReactAgent 自动出 Card，注册 Nacos，再 `A2aRemoteAgent` | 自动导出对 Java 友好；我们要对 **已有 HTTP** 友好 | 绑定 Spring Bean |
 | **BeeAI** | ACP 已并入 A2A；用 adapter 包一层 | 印证「适配器比改内核便宜」 | 再引入一套 ACP |
-| **本仓已有目录** | `ai_task_info`、算子目录、资产卡、Skill profile | **领域目录继续留在业务仓**；SUNNY 不取代推理服务表 | 把 GPU 任务目录搬进 Hub |
+| **业务仓已有目录** | 任务表、算子目录、技能说明 | **领域目录继续留在业务仓**；SUNNY 不取代它们 | 把业务任务目录搬进 Hub |
 
 ### 3.3 差异化（SUNNY 为什么还值得做）
 
-云厂商目录进不去科沃斯内网的 Hermes / ChatBI / 标注仓。Nacos 能做，但默认叙事是 Java 微服务 + 再挂一层 AI 资源。  
-SUNNY 的切口更窄、也更贴你的现实：
+云厂商目录进不了企业内网里已经在跑的 HTTP Agent。Nacos 能做，但默认叙事是 Java 微服务 + 再挂一层 AI 资源。  
+SUNNY 的切口更窄：
 
 1. **先收「已经在跑的 HTTP Agent」**，A2A 是可选升级。
-2. **技能必须带槽和副作用声明**，挡整段转发和借路查数。
-3. **首批租户是你自己的数据智能体**，用真实场景（发现 ChatBI L1 模板）验收，而不是空转 Demo。
-4. **中文企业内网、工作空间、人审上架**，不做公网 Meta Agent。
+2. **技能必须带槽和副作用声明**，挡整段转发和借路执行。
+3. **用本仓 `lab.echo` 做跨进程验收**，不把某个业务系统写成产品前提。
+4. **企业内网、工作空间、人审上架**，不做公网 Meta Agent。
 
 ### 3.4 架构选项（选一条，避免并行三套）
 
@@ -244,18 +243,18 @@ SUNNY 的切口更窄、也更贴你的现实：
           ┌──────────────────────┼──────────────────────┐
           ▼                      ▼                      ▼
    sunny-adapter           sunny-adapter            原生 A2A
-   (数据智能体)            (ChatBI)                 (未来)
+   (调用方或被调方)        (lab.echo)               (未来)
           │                      │
           ▼                      ▼
-   Hermes / Skill           /v1/chat L1
-   包装器 HTTP              显式模板
+   对方已有 HTTP           回声 HTTP
+   本地 handler            显式槽
 ```
 
 调用链（推荐）：
 
 ```text
 调用方 Agent
-  → SUNNY Search(skill=chatbi.template.fs_iot)
+  → SUNNY Search(skill=echo.ping)
   → 得到 Card + invoke_url + 调用票
   → 打到对方 sidecar 或 REST（不经过 Registry 转发，P0）
   → 对方本地 Guard / 包装器执行
@@ -268,7 +267,7 @@ P0 **不要**让 Registry 当反向代理。目录挂了不应阻断已建立的
 
 ## 5. 工程模块拆解
 
-建议仓库就在本仓 `Sunny/`，与 AIDataAgent 解耦。业务 Agent 只依赖 `sunny-client` 或一份 Card。
+仓库就是本仓。业务 Agent 只依赖 `sunny-client` 或一份 Card。
 
 ### 5.1 模块图
 
@@ -278,31 +277,31 @@ P0 **不要**让 Registry 当反向代理。目录挂了不应阻断已建立的
 | **`sunny-registry`** | FastAPI：注册、更新、搜索、读 Card、心跳、审批。存储先 SQLite | Must | M | card |
 | **`sunny-policy`** | 工作空间、角色、skill 授权、`data_class` / `side_effects` 门闩 | Must（先硬编码 + YAML） | M | registry |
 | **`sunny-adapter`** | 独立进程：托管 Card、health、把 invoke 转到现有 HTTP | Must | M | card |
-| **`sunny-client`** | Python：search / get_card / invoke；给 Hermes Skill 用 | Must | S | registry API |
+| **`sunny-client`** | Python：search / get_card / invoke | Must | S | registry API |
 | **`sunny-admin`** | 最简 Web：列表、审批、禁用 | Should | S–M | registry |
-| **`sunny-observe`** | 审计日志、和 Hermes/ChatBI `trace_id` 关联 | Should | S | registry |
+| **`sunny-observe`** | 审计日志、与调用双方 `trace_id` 对账 | Should | S | registry |
 | **`sunny-gateway`** | 统一代理、限流、mTLS | Could | L | 可换成 agentgateway |
 | **`sunny-mcp`** | 把已批准技能暴露为 MCP | Could | M | registry |
 
-### 5.2 首批接入怎么拆（数据智能体）
+### 5.2 首批接入怎么拆
 
-不要改 Hermes fork。在 AIDataAgent 仓外或 `integrations/sunny/` 增加：
+不改业务进程。在业务仓外增加：
 
-1. 从现有资产卡 / Skill 契约 **生成** 第一张 Card（人审后提交）。
-2. 跑 `sunny-adapter`，映射 1 个只读技能做通。
-3. Hermes 侧加一个可选 Skill `sunny.discover`（查目录）和 `sunny.invoke`（按 skill id 调）。默认关闭。
-4. Chat 路由仍然写死：图像 / 闭环不走 SUNNY。
+1. 从已有技能契约 **生成** 第一张 Card（人审后提交）。
+2. 跑 `sunny-adapter`，映射 1 个技能做通。
+3. 调用方用 `sunny_client` 或 REST 搜目录、按 skill id 调用。
+4. 本仓用 `lab.echo` 证明第二进程，不把某个外部系统写成前提。
 
-ChatBI 同事侧：只请他们提供 **一个 L1 模板的 URL + 槽字典 + 是否执行**。sidecar 可以由你代写，他们业务进程不动。
+对方只需提供 **一个 URL + 槽字典**。sidecar 可以代写，他们的业务进程不动。
 
 ### 5.3 里程碑（粗估，1 人主路径）
 
 | 阶段 | 周期 | 交付 | 验收 |
 |------|------|------|------|
-| **M0 纸面** | 本周 | 本文 + Card 草案 + 数据智能体首张名片草稿 | 字段能对上 A2A，且不含密钥 |
+| **M0 纸面** | 本周 | 本文 + Card 草案 + 一张无密钥样例 | 字段能对上 A2A，且不含密钥 |
 | **M1 Registry 最小** | 1–2 周 | 注册 / 搜索 / 心跳 / SQLite | pytest + curl 用例 |
-| **M2 Adapter + 首租户** | 1–2 周 | 数据智能体 sidecar 上架 1 个只读技能 | 另一进程能搜到并 invoke |
-| **M3 第二租户** | 1 周 | ChatBI L1 一个模板 | 数据智能体经 SUNNY 调到，回复无 SQL |
+| **M2 Adapter + 首租户** | 1–2 周 | sidecar 上架 1 个技能 | 另一进程能搜到并 invoke |
+| **M3 第二租户** | 1 周 | 独立回声进程 | 调用方经 SUNNY 调到，Registry 不转发 |
 | **M4 策略与管理台** | 1–2 周 | 审批、禁用、审计列表 | 未审批搜不到；无票调被拒 |
 | **M5 可选 A2A 导出** | 以后 | `/.well-known/agent-card.json` + 兼容层 | 外部 A2A client 能读名片 |
 
@@ -310,7 +309,7 @@ ChatBI 同事侧：只请他们提供 **一个 L1 模板的 URL + 槽字典 + �
 
 ### 5.4 建议技术选型（可改，先锁方向）
 
-- 语言：Python 3.10+（和 Hermes / ChatBI 同栈，sidecar 最好写）
+- 语言：Python 3.10+（sidecar 与 Registry 同栈）
 - API：FastAPI
 - 存储：P0 SQLite；人多了再 Postgres
 - Card：JSON Schema 为真源，生成 Type 或 Pydantic
@@ -323,20 +322,19 @@ ChatBI 同事侧：只请他们提供 **一个 L1 模板的 URL + 槽字典 + �
 
 2026-09-18 已拍板，全文见 [ADR-001](../decisions/ADR-001-开写前五件事.md)。摘要：
 
-1. **首张名片**：对外只挂 `collect.strategy.query`、`collect.volume.query`；模型调用 / 建任务不开放。
+1. **首张名片**：只挂已契约化的技能；模型调用 / 建任务 / 整段聊天不开放。
 2. **工作空间**：Agent 服务账号，不进个人 scratch。见 [ADR-002](../decisions/ADR-002-工作空间隔离.md)。
 3. **被搜到**：已登记 Agent 默认可被其他已登记 Agent 发现。
 4. **调用票**：接受 Registry 短时票。
-5. **ChatBI**：意向仍是 L1 + 知识问答 + 生成 SQL；**八字段表搁置**。
+5. **第二户**：用独立进程验收跨进程调用。本仓落地的是 `lab.echo`。
 
 ---
 
 ## 7. 建议的下一步
 
 1. ~~冻结范围~~ 选型 B 已冻结。
-2. ~~起草 Card Schema + 无密钥样例~~ 见 [`../../cards/aidata.hermes.sample.json`](../../cards/aidata.hermes.sample.json)。**样例评审通过前仍不建库、不写管理台。**
-3. ChatBI 八字段搁置，不挡 M0。
-4. 数据智能体样例已评审；是否进入 M1 Registry 另开。
+2. ~~起草 Card Schema + 无密钥样例~~ 见 [`../../cards/lab.echo.sample.json`](../../cards/lab.echo.sample.json)。
+3. M1 Registry 已另开并落地。跨进程示例是 `lab.echo`。
 
 ---
 
@@ -352,5 +350,5 @@ ChatBI 同事侧：只请他们提供 **一个 L1 模板的 URL + 槽字典 + �
 - 公网目录（对照，不采用）：<https://www.a2a-registry.org/> · <https://agorahub.dev/>
 - Spring AI Alibaba A2A + Nacos：仓库 `alibaba/spring-ai-alibaba` 示例 README
 - BeeAI ACP → A2A：LF AI & Data，2025-08
-- 本系列：[`多Agent协作-行业口径与现网对照.md`](./多Agent协作-行业口径与现网对照.md) · [`AI数据智能体接入ChatBI-条件.md`](./AI数据智能体接入ChatBI-条件.md)
+- 本系列：[`多Agent协作-行业口径与现网对照.md`](./多Agent协作-行业口径与现网对照.md)
 - 现行：[`../decisions/ADR-001-开写前五件事.md`](../decisions/ADR-001-开写前五件事.md) · [`../specs/sunny-card.md`](../specs/sunny-card.md)

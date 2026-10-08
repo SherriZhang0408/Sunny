@@ -79,4 +79,4 @@ stdio（需能 import 本仓，或把仓库根设为 `cwd`）：
 }
 ```
 
-Hub 会话则带登录 token。Hermes 可选 Skill `sunny.discover` 可继续用 REST；不强制改道 MCP。
+Hub 会话则带登录 token。发现也可以继续走 REST，不强制改道 MCP。

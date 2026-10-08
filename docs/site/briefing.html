@@ -763,14 +763,14 @@
           </article>
           <div class="ra-direct">短时票签发后，业务请求不经过 Registry</div>
           <div class="ra-targets">
-            <article><strong>Hermes sidecar</strong><span>本地 handler / AIDATA</span></article>
+            <article><strong>通用 sidecar</strong><span>本地 handler 或 HTTP 映射</span></article>
             <article><strong>Echo sidecar</strong><span>映射到 HTTP 服务</span></article>
             <article><strong>后续业务 sidecar</strong><span>保留原系统权限</span></article>
           </div>
         </div>
         <div class="fact-strip">
           <span><strong>Registry</strong> 8088</span>
-          <span><strong>Hermes sidecar</strong> 8091</span>
+          <span><strong>通用 sidecar</strong> 8091</span>
           <span><strong>Echo HTTP</strong> 8092</span>
           <span><strong>Echo sidecar</strong> 8093</span>
         </div>
@@ -830,7 +830,7 @@
           <article><strong>发现与搜索</strong><p>REST、公开卡、Extended Card、A2A 导出、MCP 和 SQLite FTS5。</p></article>
           <article><strong>安全调用</strong><p>HMAC 短时票，调用方、目标、技能与 Card 版本绑定，sidecar 验票。</p></article>
           <article><strong>生命周期</strong><p>心跳、探活、在线状态、停用、弃用、修订快照和 Card 变更流。</p></article>
-          <article><strong>双实例验证</strong><p><code>aidata.hermes</code> 真实技能与 <code>lab.echo</code> 跨进程 HTTP 映射。</p></article>
+          <article><strong>跨进程验证</strong><p><code>lab.echo</code> 用 HTTP 映射证明搜卡、出票、直打 sidecar。</p></article>
         </div>
         <div class="evidence">
           <strong>工程验证路径</strong>

@@ -33,7 +33,7 @@
         <li><a href="#briefing">定位与边界</a></li>
         <li><a href="#order">启动顺序与端口</a></li>
         <li><a href="#registry">Registry + Hub</a></li>
-        <li><a href="#adapter">Adapter（Hermes）</a></li>
+        <li><a href="#adapter">Adapter</a></li>
         <li><a href="#echo">Echo HTTP + Echo sidecar</a></li>
         <li><a href="#client">sunny_client</a></li>
         <li><a href="#validate">validate_card.py</a></li>
@@ -52,7 +52,7 @@
     <article class="module" id="map">
       <h2>模块怎么接在一起</h2>
       <p class="lead">控制面只负责发现、出票、心跳。业务调用出票后<strong>直打 sidecar</strong>，Registry 不转发。点节点可跳到对应说明。</p>
-      <div class="arch" role="img" aria-label="SUNNY 模块集成：Hub、Client、MCP 走 Registry；sidecar 直打业务；Echo 与 AIDATA 在 sidecar 下游。">
+      <div class="arch" role="img" aria-label="SUNNY 模块集成：Hub、Client、MCP 走 Registry；sidecar 直打业务；Echo 在 sidecar 下游。">
         <div class="arch-legend">
           <span><i class="swatch ctrl"></i>控制面</span>
           <span><i class="swatch data"></i>调用链 / sidecar</span>
@@ -83,7 +83,7 @@
         <div class="arch-row two">
           <a class="node data" href="#adapter">
             <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 7h2M10 17h4M9 12h6"/></svg></span>
-            <span><strong>Adapter Hermes</strong><small>aidata.hermes sidecar，本地或映射执行</small><span class="port">:8091 · /sunny/invoke/…</span></span>
+            <span><strong>Adapter</strong><small>通用 sidecar，本地或映射执行</small><span class="port">:8091 · /sunny/invoke/…</span></span>
           </a>
           <a class="node data" href="#echo">
             <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4v2M12 18v2M5 7l1.5 1.5M17.5 15.5 19 17M4 12h2M18 12h2M5 17l1.5-1.5M17.5 8.5 19 7"/><circle cx="12" cy="12" r="3"/></svg></span>
@@ -94,7 +94,7 @@
         <div class="arch-row two">
           <a class="node opt" href="#adapter">
             <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v6c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 13v4c0 1.7 3.1 3 7 3s7-1.3 7-3v-4"/></svg></span>
-            <span><strong>AIDATA 包装器</strong><small>可选。无则 volume 仍算调通（ready=false）</small><span class="port">AIDATA_ROOT</span></span>
+            <span><strong>本地 handler</strong><small>映射不到 HTTP 时在进程内执行</small><span class="port">可选</span></span>
           </a>
           <a class="node opt" href="#echo">
             <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h4l2-6 4 12 2-6h4"/></svg></span>
@@ -138,7 +138,7 @@
         <li>登记：管理台填入、网址同步、Agent 自注册。</li>
         <li>审批：<code>approval_required</code> 须管理员通过；开发者不能自审。</li>
         <li>出票与探活：HMAC 短 TTL；周期探活 / 重抓；升版旧票作废。</li>
-        <li>两户：<code>aidata.hermes</code> 真技能；<code>lab.echo</code> 跨进程回声。</li>
+        <li>跨进程示例：<code>lab.echo</code> 回声。空库另有一张历史样例卡，只给既有测试用。</li>
       </ul>
 
       <h3>管理台六页（顶栏四字）</h3>
@@ -151,33 +151,30 @@
         <div class="chip"><strong>系统设置</strong> 五主题，只存在本机</div>
       </div>
 
-      <h3>一条真技能，一条回声</h3>
+      <h3>回声示例</h3>
       <ul>
-        <li><code>aidata.hermes</code>：sidecar <code>:8091</code>。<code>collect.strategy.query</code> 进程内枚举；volume 无包装器也算调通。</li>
         <li><code>lab.echo</code>：HTTP <code>:8092</code> + sidecar <code>:8093</code>。<code>echo.ping</code> 可搜可调；<code>echo.secret</code> 只在 Extended Card。</li>
-        <li>不改 Hermes 内核。ChatBI 八字段搁置；第二户不是 ChatBI。</li>
+        <li>Registry 不转发业务。执行留在 sidecar。</li>
       </ul>
 
       <h3>刻意不做什么</h3>
       <ul>
         <li>不当调用网关：Registry 不转发业务。</li>
-        <li>不改 Hermes 内核 / SOUL；图像闭环禁止改道。</li>
         <li>不做公司 SSO、不做外置 agentgateway（以后）。</li>
-        <li>不催 ChatBI 八字段；不收官方 MCP 商店或 Prompt 仓。</li>
+        <li>不收官方 MCP 商店或 Prompt 仓。</li>
       </ul>
 
       <h3>本机十分钟能走通</h3>
       <ul>
         <li>起 Registry → 浏览器 <code>http://127.0.0.1:8088</code> → <code>admin</code> 登录浏览目录。</li>
-        <li>起 Hermes sidecar → Hub 上 <code>aidata.hermes</code> 变 online。</li>
-        <li><code>python3 -m sunny_client --skill collect.strategy.query --slots '{"mission_name":"living_room"}'</code></li>
-        <li>可选再起 echo 两进程，调 <code>echo.ping</code>。</li>
+        <li>起 echo HTTP 与 echo sidecar → Hub 上 <code>lab.echo</code> 变 online。</li>
+        <li><code>python3 -m sunny_client --skill echo.ping --slots '{"query":"hello"}'</code></li>
       </ul>
       <p class="muted">这是本机 / 局域网路径，不是「已上生产」声明。详细参数见下面各模块。</p>
 
       <h3>进程、鉴权、调用链</h3>
       <div class="brief-grid">
-        <div class="chip"><strong>端口</strong> Registry+Hub 8088 · Hermes 8091 · echo 8092 · echo sidecar 8093</div>
+        <div class="chip"><strong>端口</strong> Registry+Hub 8088 · sidecar 8091 · echo 8092 · echo sidecar 8093</div>
         <div class="chip"><strong>三种身份</strong> Hub 会话 · Agent <code>sak_</code> · 首次 <code>X-Sunny-Enroll</code></div>
         <div class="chip"><strong>调用链</strong> 搜卡 → 出票 → 直打 sidecar → sidecar 回 Registry 验票 → 本地执行</div>
         <div class="chip"><strong>门闩</strong> 会话不能当调用票；升版旧票作废；发现默认只要 online</div>
@@ -196,21 +193,19 @@
       <h2>1. 推荐启动顺序</h2>
       <p class="lead">Registry 必须先起。Adapter 起来后会 enroll / 心跳。Client 是一次性命令，不是常驻进程。Hub 不单独起，跟 Registry 同进程。</p>
 <pre><code>1. python3 -m sunny_registry
-2. python3 -m sunny_adapter
-# 第二户（可选）
-3. python3 -m sunny_echo
-4. ECHO_URL=http://127.0.0.1:8092 \
+2. python3 -m sunny_echo
+3. ECHO_URL=http://127.0.0.1:8092 \
    SUNNY_ADAPTER_CARD=cards/lab.echo.sample.json \
    SUNNY_ADAPTER_MAPPING=sunny_adapter/mappings/lab.echo.json \
    SUNNY_ADAPTER_AGENT_ID=lab.echo \
    SUNNY_ADAPTER_PORT=8093 \
    python3 -m sunny_adapter
-5. python3 -m sunny_client --skill collect.strategy.query --slots '{"mission_name":"living_room"}'</code></pre>
+4. python3 -m sunny_client --skill echo.ping --slots '{"query":"hello"}'</code></pre>
       <table>
         <thead><tr><th>服务</th><th>默认端口</th><th>成功探活</th></tr></thead>
         <tbody>
           <tr><td>Registry + Hub</td><td>8088</td><td><code>GET /api/v1/health</code> → <code>ok: true</code></td></tr>
-          <tr><td>Adapter Hermes</td><td>8091</td><td><code>GET /health</code> → <code>enrolled: true</code></td></tr>
+          <tr><td>Adapter</td><td>8091 或示例 8093</td><td><code>GET /health</code> → <code>enrolled: true</code></td></tr>
           <tr><td>Echo HTTP</td><td>8092</td><td><code>GET /health</code> → <code>ready: true</code></td></tr>
           <tr><td>Adapter lab.echo</td><td>8093</td><td><code>GET /health</code> → <code>mapping.ok</code></td></tr>
         </tbody>
@@ -227,7 +222,7 @@
           <tr><td><code>SUNNY_HOST</code> / <code>SUNNY_PORT</code></td><td><code>0.0.0.0</code> / <code>8088</code></td><td>监听</td></tr>
           <tr><td><code>SUNNY_PUBLIC_URL</code></td><td>空则推局域网 IPv4</td><td>握手包与名片基址</td></tr>
           <tr><td><code>SUNNY_DB</code></td><td><code>data/sunny.db</code></td><td>SQLite</td></tr>
-          <tr><td><code>SUNNY_SEED</code></td><td><code>1</code>（<code>0</code> 关）</td><td>空库种 <code>aidata.hermes</code> + <code>lab.inspector</code></td></tr>
+          <tr><td><code>SUNNY_SEED</code></td><td><code>1</code>（<code>0</code> 关）</td><td>空库种入演示对（历史样例卡 + <code>lab.inspector</code>）</td></tr>
           <tr><td><code>SUNNY_ADMIN_TOKEN</code></td><td><code>sunny-dev-admin</code></td><td>管理员 Bearer；也是 Hub <code>admin</code> 密码</td></tr>
           <tr><td><code>SUNNY_DEVELOPER_PASSWORD</code></td><td><code>sunny-dev-developer</code></td><td>Hub <code>developer</code> 密码</td></tr>
           <tr><td><code>SUNNY_ENROLL_TOKEN</code></td><td><code>sunny-dev-enroll</code></td><td>自注册 <code>X-Sunny-Enroll</code></td></tr>
@@ -254,23 +249,22 @@ SUNNY_SEED=1 python3 -m sunny_registry</code></pre>
     </article>
 
     <article class="module" id="adapter">
-      <h2>3. Adapter（Hermes / aidata.hermes）</h2>
-      <p class="lead">入口 <code>python3 -m sunny_adapter</code>。先起 Registry。默认挂 <code>aidata.hermes</code>，端口 8091。Hub 已有同一 <code>agent_id</code> 时只挂接口，不改 <code>enrollment_source</code>。</p>
+      <h2>3. Adapter</h2>
+      <p class="lead">入口 <code>python3 -m sunny_adapter</code>。先起 Registry。不设名片时挂仓内历史样例，端口 8091，只给既有测试用。独立示例见下一节 <code>lab.echo</code>。Hub 已有同一 <code>agent_id</code> 时只挂接口，不改 <code>enrollment_source</code>。</p>
       <table>
         <thead><tr><th>变量</th><th>默认</th><th>用途</th></tr></thead>
         <tbody>
           <tr><td><code>SUNNY_REGISTRY_URL</code></td><td><code>http://127.0.0.1:8088</code></td><td>Registry 基址</td></tr>
           <tr><td><code>SUNNY_ADAPTER_HOST</code> / <code>PORT</code></td><td><code>0.0.0.0</code> / <code>8091</code></td><td>监听</td></tr>
           <tr><td><code>SUNNY_ADAPTER_PUBLIC_URL</code></td><td>局域网 IP + <code>:8091/sunny/v1</code></td><td>写入 Card 的对外接口</td></tr>
-          <tr><td><code>SUNNY_ADAPTER_CARD</code></td><td><code>cards/aidata.hermes.sample.json</code></td><td>挂载名片</td></tr>
-          <tr><td><code>SUNNY_ADAPTER_AGENT_ID</code></td><td><code>aidata.hermes</code></td><td>标识</td></tr>
-          <tr><td><code>SUNNY_ADAPTER_MAPPING</code></td><td><code>sunny_adapter/mappings/aidata.hermes.json</code>（文件存在才加载）</td><td>技能路由</td></tr>
+          <tr><td><code>SUNNY_ADAPTER_CARD</code></td><td>仓内历史样例；示例设 <code>cards/lab.echo.sample.json</code></td><td>挂载名片</td></tr>
+          <tr><td><code>SUNNY_ADAPTER_AGENT_ID</code></td><td>与名片一致；示例 <code>lab.echo</code></td><td>标识</td></tr>
+          <tr><td><code>SUNNY_ADAPTER_MAPPING</code></td><td>同名映射存在才加载；示例 <code>sunny_adapter/mappings/lab.echo.json</code></td><td>技能路由</td></tr>
           <tr><td><code>SUNNY_ADAPTER_KEY_FILE</code></td><td><code>data/adapter-keys/&lt;id&gt;.key</code></td><td>持久化 <code>sak_</code></td></tr>
           <tr><td><code>SUNNY_AGENT_KEY</code></td><td>空</td><td>已有 key 可跳过签发</td></tr>
           <tr><td><code>SUNNY_ADMIN_TOKEN</code> / <code>SUNNY_ENROLL_TOKEN</code></td><td>与 Registry 相同开发值</td><td>409 后 attach / 首次自注册</td></tr>
           <tr><td><code>SUNNY_ADAPTER_HEARTBEAT_S</code></td><td><code>30</code></td><td>心跳间隔</td></tr>
           <tr><td><code>SUNNY_ADAPTER_ENROLLMENT</code></td><td><code>self</code></td><td>注册来源字段</td></tr>
-          <tr><td><code>AIDATA_ROOT</code></td><td>本机 AIDataAgent 路径</td><td>有包装器才真 <code>collect.volume.query</code></td></tr>
         </tbody>
       </table>
       <p><strong>启动</strong></p>
@@ -279,10 +273,9 @@ SUNNY_SEED=1 python3 -m sunny_registry</code></pre>
       <ul>
         <li><code>GET /health</code>：<code>ok: true</code>、<code>enrolled: true</code></li>
         <li>匿名可打开 <code>/.well-known/agent-card.json</code>（与 <code>/agent.json</code>、<code>/sunny/v1/card</code> 相同，带 ETag）</li>
-        <li>Hub 上该卡 <code>online</code>；钥匙在 <code>data/adapter-keys/aidata.hermes.key</code>（不进 Git）</li>
-        <li><code>collect.strategy.query</code> 进程内枚举即可调通；volume 无包装器时 <code>ready=false</code> <code>mock=true</code> 仍算调通</li>
+        <li>Hub 上该卡 <code>online</code>；钥匙在 <code>data/adapter-keys/&lt;agent_id&gt;.key</code>（不进 Git）</li>
       </ul>
-      <p><strong>依赖</strong>：必须先有 Registry。可选 AIDataAgent 包装器。</p>
+      <p><strong>依赖</strong>：必须先有 Registry。</p>
     </article>
 
     <article class="module" id="echo">
@@ -332,17 +325,16 @@ python3 -m sunny_adapter</code></pre>
         </tbody>
       </table>
       <p><strong>启动</strong></p>
-<pre><code>python3 -m sunny_client --skill collect.strategy.query --slots '{"mission_name":"living_room"}'
-python3 -m sunny_client --skill echo.ping --slots '{"query":"hello"}'</code></pre>
+<pre><code>python3 -m sunny_client --skill echo.ping --slots '{"query":"hello"}'</code></pre>
       <p><strong>成功判定</strong>：退出码 0，stdout 打印 JSON 结果。失败打 stderr，码 1。</p>
-      <p><strong>依赖</strong>：Registry + 目标 sidecar。Hermes 对话不要直接跑这条；可选 Skill 走 <code>python3 -m sunny_client.hermes discover|invoke</code>，需 <code>AIDATA_SUNNY=1</code> 或 <code>SUNNY_HERMES_SKILLS=1</code>，默认关，不改 Hermes 内核。</p>
+      <p><strong>依赖</strong>：Registry + 目标 sidecar。这条 CLI 搜卡、出票、直打 sidecar，不把 Registry 当对话入口。</p>
     </article>
 
     <article class="module" id="validate">
       <h2>6. validate_card.py</h2>
       <p class="lead">离线校验名片：JSON Schema + 禁密钥扫描。不需要 Registry。</p>
       <p><strong>启动</strong></p>
-<pre><code>python3 scripts/validate_card.py cards/aidata.hermes.sample.json</code></pre>
+<pre><code>python3 scripts/validate_card.py cards/lab.echo.sample.json</code></pre>
       <p><strong>成功判定</strong>：码 0 打印 <code>OK …</code>；schema / 密钥失败码 1；用法或文件不存在码 2。</p>
       <p><strong>依赖</strong>：<code>sunny_registry.card_validate</code>。样例卡本机可有，仓内 <code>cards/</code> 只跟踪 <code>.gitkeep</code>。</p>
     </article>

@@ -4,7 +4,7 @@
 |----|------|
 | 状态 | 草案，已有无密钥样例 |
 | Schema | [`../../schemas/sunny-card.schema.json`](../../schemas/sunny-card.schema.json) |
-| 样例 | [`../../cards/aidata.hermes.sample.json`](../../cards/aidata.hermes.sample.json) |
+| 样例 | [`../../cards/lab.echo.sample.json`](../../cards/lab.echo.sample.json) |
 | 决策 | [ADR-001](../decisions/ADR-001-开写前五件事.md) |
 
 > 对内这一份 JSON 是真源。sidecar 的 `/.well-known/agent-card.json` 挂完整 SUNNY Card（给 Registry `pull`）。Registry `GET /api/v1/agents/{id}` 对对等回公开卡（剥 `data_class=restricted` 技能，保留 `x-sunny`）。鉴权 `GET /api/v1/agents/{id}/extended` 回完整卡。`GET /api/v1/agents/{id}/a2a` 再剥 `x-sunny` 与 restricted，对齐 A2A v1.0。有任意 restricted 技能时 `capabilities.extendedAgentCard=true`。
@@ -14,23 +14,23 @@
 ## 1. 和 A2A、现网资产卡的关系
 
 ```text
-现网资产卡 YAML / Skill 契约
+业务侧技能契约
         │ 人审圈选对外技能
         ▼
    SUNNY Card（本规格）
         │ 登记后被已登记对等发现
         ▼
-   sidecar invoke（票 + 槽）──► 包装器 / Guard
+   sidecar invoke（票 + 槽）──► 对方已有 HTTP
 ```
 
 | 来源 | 管什么 | Card 怎么用 |
 |------|--------|-------------|
 | [A2A v1.0 AgentCard](https://a2a-protocol.org/v1.0.0/specification/) | `name` `description` `version` `supportedInterfaces` `capabilities` `defaultInputModes` `defaultOutputModes` `skills[]` | 顶层原样收录 |
-| 语义资产卡 `skills/assets/*.yaml` | 意图、边界、权限、版本 | 映射到 `skills[].x-sunny.source_asset` |
-| Skill JSON 契约 | 输入 / 输出槽 | 映射到 `skills[].x-sunny.input_schema` / `output_schema` |
+| 业务侧说明 | 意图、边界、权限、版本 | 可记到 `skills[].x-sunny.source_asset` |
+| 技能契约 | 输入 / 输出槽 | 映射到 `skills[].x-sunny.input_schema` / `output_schema` |
 | SUNNY 企业扩展 | 工作空间、发现、副作用、禁挂清单 | 全部放 `x-sunny`，避免污染 A2A 导出 |
 
-资产卡仍是说明书；**Card 才是跨运行时发现面**。不要把内部 6 张资产卡原样抄成 6 个对外 skill。
+业务说明仍留在原系统；**Card 才是跨运行时发现面**。不要把内部工具全集原样抄成对外 skill。
 
 ---
 
@@ -62,7 +62,7 @@
 
 | 字段 | 取值 | 说明 |
 |------|------|------|
-| `agent_id` | `aidata.hermes` | 稳定主键，点号分段 |
+| `agent_id` | `lab.echo` | 稳定主键，点号分段 |
 | `workspace` | 非空字符串 | 服务工作区标签；P0 不分三级（ADR-002） |
 | `discovery` | `registered_peers` / `private` / `approval_required` | 默认 `registered_peers`（ADR-001 §3）。`private` 不对对等开放。`approval_required` 须管理员通过后才变成 `registered_peers`；见 [policy.md](./policy.md) |
 | `scope` | 不写 / `household` / `cohort` | 可选。不写保持已登记对等可见。`household` 只对同一 `workspace` 可见、可出票。`cohort` 按技能或标签跨空间发现，出票不限空间 |
@@ -88,24 +88,24 @@
 
 ---
 
-## 4. 数据智能体首张名片怎么从资产卡收窄
+## 4. 示例名片怎么收窄
 
-依据 ADR-001，只对外 2 个 skill。对照现网：
+依据 ADR-001，只对外已经契约化的技能。本仓示例 `lab.echo`：
 
-| 对外 skill | 收窄自 | 关键收窄 |
-|------------|--------|----------|
-| `collect.strategy.query` | `KB.API.Retrieve.v1` / `kb.retrieve` | 检索域锁在采集策略枚举与 `ai_collect` 字典，不开放整库知识 |
-| `collect.volume.query` | `ES.API.QueryAiCollect.v1` / `es.query_ai_collect` | 只保留 count；去掉 compose 给建任务用的 DSL、preview 出图、`--confirm` 变成人审建任务的跳板 |
+| 对外 skill | 对等 | 关键收窄 |
+|------------|------|----------|
+| `echo.ping` | 可搜、可出票 | 只回显 `query`，不当业务系统 |
+| `echo.secret` | 搜不到、出票 403 | 只在 Extended Card 出现 |
 
 接口占位：
 
 ```text
-POST https://aidata.internal.example/sunny/v1/invoke
+POST https://echo.internal.example/sunny/v1/invoke/echo.ping
 protocolBinding: HTTP+JSON
 Authorization: Bearer <Registry 短时票>
 ```
 
-真源仍读 `AIDATA_*` 环境变量，**不进 Card、不进 Git。**
+环境凭证留在 sidecar 进程，**不进 Card、不进 Git。**
 
 ---
 
@@ -113,24 +113,22 @@ Authorization: Bearer <Registry 短时票>
 
 ```json
 {
-  "skill_id": "collect.volume.query",
+  "skill_id": "echo.ping",
   "slots": {
-    "mission_name": "living_room",
-    "quest_name": "MetaData",
-    "robotType": ["0gxgac"]
+    "query": "hello"
   },
   "trace_id": "caller-trace-…"
 }
 ```
 
-成功回包必须能对上 `trace_id`，并带 `ready` / `mock`。`ready=false` 时调用方不得把数字当业务余量。
+成功回包必须能对上 `trace_id`。`ready=false` 时调用方不得把回包当业务成功。
 
 ---
 
 ## 6. 校验
 
 ```bash
-python3 scripts/validate_card.py cards/aidata.hermes.sample.json
+python3 scripts/validate_card.py cards/lab.echo.sample.json
 ```
 
 通过标准：Schema 合法、至少 1 个 skill 与 1 个接口、树里无密钥痕迹。

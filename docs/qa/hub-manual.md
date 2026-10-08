@@ -168,7 +168,7 @@ python3 -m pytest -q
 | 7.2  | 「导出说明」                                                                       | 下载 `sunny-join.md`；打开后**没有** enroll token               | ☐   |
 | 7.3  | 「导出说明（含令牌）」                                                                | 下载 `sunny-join.secret.md`（勿提交 Git）；普通导出仍无 token         | ☐   |
 | 7.4  | 手改 `#/publish/self`                                                              | 回落到「主动登记」；**没有**注册令牌框、**没有**「代为登记」                       | ☐   |
-| 7.14 | 「主动登记」名片框空着                                                                | 浅灰占位是 AI 数据智能体示例（两技能 `collect.strategy.query` / `collect.volume.query`），`agent_id` 为 `your.org.aidata`，不是已填值 | ☐   |
+| 7.14 | 「主动登记」名片框空着                                                                | 浅灰占位是回声示例（技能 `echo.ping`），`agent_id` 为 `your.org.echo`，不是已填值 | ☐   |
 | 7.5  | 名片框贴一段坏 JSON → 登记                                                          | 「JSON 无法解析」                                             | ☐   |
 | 7.6  | 贴一份合法样例卡（先改成未占用的 `agent_id`，如 `qa.hub.manual`）→ 登记                         | 弹层「Agent key 只显示这一次」；点「查看名片」进详情                         | ☐   |
 | 7.12 | 对等可见选「需审批后可见」再登记一张 QA 卡                                                    | 目录徽章「待审批」；浏览筛「待审批」能看到                                   | ☐   |
@@ -243,8 +243,6 @@ python3 -m pytest -q
 
 ## 11. 故意不测（本清单范围外）
 
-- AIDATA 真 `collect.volume.query` count（包装器 + 代理，见 [adapter](../specs/adapter.md)）
-- ChatBI 第二户现网 `sunny.invoke`（八字段搁置）
 - 公司 SSO、移动端专项适配（窄窗 10.11 只看 390 会不会挤爆，不当成 App）
 - 浏览器里真的拿会话令牌去 `POST /tickets/verify`（pytest 已拒 `typ=session`）
 - 把整棵 `docs/` 或 `docs/specs/*.md` 挂到 Registry（合同仍在仓库里读；`/help/` 页脚只写路径，不再链出）

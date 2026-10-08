@@ -30,7 +30,7 @@ SUNNY_ADAPTER_PUBLIC_URL=http://127.0.0.1:8093/sunny/v1 \
 python3 -m sunny_adapter
 ```
 
-不要和 `aidata.hermes` 的 `:8091` 抢端口。sidecar well-known 仍挂完整 SUNNY Card，给 Registry `pull`。
+不要和默认 sidecar 的 `:8091` 抢端口。sidecar well-known 仍挂完整 SUNNY Card，给 Registry `pull`。
 
 ## 联测
 
@@ -38,4 +38,4 @@ python3 -m sunny_adapter
 python3 -m sunny_client --skill echo.ping --slots '{"query":"hello"}'
 ```
 
-调用方用非 Hermes 身份（`lab.inspector` 的 `sak_` 或管理员代签）。期望 `ready=true` 且回声 `query`。
+调用方用 `lab.inspector` 的 `sak_` 或管理员代签。期望 `ready=true` 且回声 `query`。

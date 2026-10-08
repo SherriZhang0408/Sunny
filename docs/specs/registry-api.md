@@ -66,6 +66,6 @@ python3 -m pip install -r requirements.txt
 SUNNY_SEED=1 python3 -m sunny_registry
 ```
 
-空库会种入 `aidata.hermes`（Hub 填入）和 `lab.inspector`（Agent 主动），并有一条演示调用边。
+空库会种入一张历史样例卡（Hub 填入）和 `lab.inspector`（Agent 主动），并有一条演示调用边。样例卡只给既有测试用。
 
 相关环境变量：`SUNNY_HEARTBEAT_STALE_S`（默认 90，超过则 `stale`，搜索默认排除）、`SUNNY_PROBE_TIMEOUT_S`（默认 2，Card URL 探活超时）、`SUNNY_PULL_TIMEOUT_S`（默认 5，Well-Known 拉取超时）、`SUNNY_SWEEP_S`（默认 60，周期探活/重抓；`0` 关闭）、`SUNNY_REFRESH_INTERVAL_S`（默认 300，有 `card_source_url` 才重抓）。探活只 GET `/health`、`/.well-known/agent-card.json` 或接口基址，User-Agent 为 `SUNNY-Registry-Probe/1.0`，不代发 skill。拉取 User-Agent 为 `SUNNY-Registry-Pull/1.0`，规格见 [well-known-pull.md](./well-known-pull.md)。`GET /api/v1/health` 含 `sweep`。

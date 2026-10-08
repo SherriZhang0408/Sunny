@@ -2,8 +2,7 @@
 
 | 项 | 内容 |
 |----|------|
-| 首租户 | `aidata.hermes` sidecar，不改 Hermes 内核 |
-| 对外技能 | `collect.strategy.query`（本进程枚举）、`collect.volume.query`（有 AIDATA 包装器才 count） |
+| 示例 | `lab.echo`：回声 HTTP + 映射 sidecar。未设置名片时，进程仍读取仓内历史样例，只给既有测试用 |
 | 调用 | Client 向 Registry 搜卡、拿短时票，**直打 sidecar**。Registry 不转发 |
 
 ## 进程
@@ -17,7 +16,6 @@ sunny-client（另一进程）
   → sidecar 向 Registry verify 票
   → 本地执行；调用未结束时按间隔再验一次
   → 再验失败：丢掉结果，HTTP 上游关掉本次连接，对调用方 `409 ticket revoked`
-  → 不上报 SQL / 预览图 / DSL
   → Client 可选 POST /invocations 记一笔边
 ```
 
@@ -28,10 +26,9 @@ sunny-client（另一进程）
 | `SUNNY_REGISTRY_URL` | `http://127.0.0.1:8088` | 本机连 Registry；跨机改成握手包里的基址 |
 | `SUNNY_ADAPTER_HOST` | `0.0.0.0` | sidecar 监听 |
 | `SUNNY_ADAPTER_PUBLIC_URL` | 局域网 IP + `:8091/sunny/v1` | 写入 Card 的对外接口，不会是 `0.0.0.0`。第二户 echo sidecar 用 `:8093` |
-| `SUNNY_ADAPTER_CARD` | `cards/aidata.hermes.sample.json` | 挂上时用的名片 |
+| `SUNNY_ADAPTER_CARD` | 不设则用仓内历史样例；示例请设 `cards/lab.echo.sample.json` | 挂上时用的名片 |
 | `SUNNY_ADAPTER_KEY_FILE` | `data/adapter-keys/<agent_id>.key` | sidecar 自己的 `sak_` |
 | `SUNNY_ADMIN_TOKEN` / `SUNNY_ENROLL_TOKEN` | `sunny-dev-*` | 409 后签发 key / 首次自注册 |
-| `AIDATA_ROOT` | `~/PycharmProjects/AIDataAgent` | 有 `es_query_ai_collect.py` 才真 count |
 | `SUNNY_ADAPTER_MAPPING` | `sunny_adapter/mappings/<agent_id>.json` | 技能路由：`local` 或 HTTP。缺省文件存在则自动加载 |
 | `SUNNY_ADAPTER_REVOKE_POLL_S` | `0.25` | 调用未结束时复查验票的间隔；小于 0.05 按 0.05 |
 
@@ -43,11 +40,10 @@ Hub 已登记同一 `agent_id` 时，sidecar **只挂接口、不改 enrollment_
 
 ```bash
 python3 -m sunny_registry
-python3 -m sunny_adapter
-# 第二户：python3 -m sunny_echo  （:8092）
-# ECHO_URL=http://127.0.0.1:8092 SUNNY_ADAPTER_CARD=cards/lab.echo.sample.json \
-# SUNNY_ADAPTER_MAPPING=sunny_adapter/mappings/lab.echo.json SUNNY_ADAPTER_AGENT_ID=lab.echo \
-# SUNNY_ADAPTER_PORT=8093 python3 -m sunny_adapter
+python3 -m sunny_echo
+ECHO_URL=http://127.0.0.1:8092 SUNNY_ADAPTER_CARD=cards/lab.echo.sample.json \
+SUNNY_ADAPTER_MAPPING=sunny_adapter/mappings/lab.echo.json SUNNY_ADAPTER_AGENT_ID=lab.echo \
+SUNNY_ADAPTER_PORT=8093 python3 -m sunny_adapter
 ```
 
 Sidecar 启动时会：
@@ -63,7 +59,7 @@ Sidecar 启动时会：
 
 验票之后、执行之前，按 Card 里该技能的 `x-sunny.input_schema` 校验 `slots`。多出来的键（例如 `sql`）或缺少 `anyOf` 必填 → `400`。
 
-`aidata.hermes` 默认映射把两技能标成 `handler: local`，行为与 M2 相同。下一个租户只交 Card + 映射，不必再写 Python handler：
+新租户只交 Card + 映射，不必再写 Python handler：
 
 ```json
 {
@@ -83,19 +79,14 @@ Sidecar 启动时会：
 
 `url` / `headers` 支持 `${VAR}` 与 `${VAR:-default}`。URL 必须是 http(s)，且来自映射文件，不接受 slots 里的地址。下游失败回 `ready=false`，不把密钥写进错误。`/health` 带 `mapping.routes`；若配置了 `heartbeat.url` 再探下游，**不挡** Registry 心跳。
 
-也接受 `.yaml`（需本机已装 PyYAML）。无映射文件时仍走内置 `dispatch`（仅 Hermes 两技能）。
+也接受 `.yaml`（需本机已装 PyYAML）。无映射文件时走内置本地 handler（仅历史样例）。
 
 ## 另一进程调用
 
 ```bash
-python3 -m sunny_client --skill collect.strategy.query --slots '{"mission_name":"living_room"}'
+python3 -m sunny_client --skill echo.ping --slots '{"query":"hello"}'
 ```
 
 环境变量：`SUNNY_REGISTRY_URL`、`SUNNY_AGENT_KEY`（调用方）、`SUNNY_ADMIN_TOKEN`（本地可代签票）、`SUNNY_CALLER_ID`（管理员代签时的 caller，默认 `lab.inspector`）。
 
-Hermes Chat 不要直接跑这一条。对话里用可选 Skill `sunny.discover` / `sunny.invoke`（默认关，见 [hermes-skills.md](./hermes-skills.md)），避免图像/闭环被改道。
-
-## 余量查询
-
-未配置 AIDataAgent 包装器时：`ready=false` `mock=true` `count=0`，**仍然算 M2 调通**（票验过、槽校验过、没有泄 DSL）。  
-设置 `AIDATA_ROOT` 且本机 `AIDATA_*` 代理可用时，sidecar 才对 `ai_collect` 做 count。
+调用方走这条 CLI 或 REST。不要把 Registry 当对话入口。
