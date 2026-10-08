@@ -153,7 +153,7 @@ def test_publish_logic_executes_from_app_js(tmp_path):
     assert result["pages"] == ["hub", "pull", "join"]
 
 
-def test_card_json_placeholder_is_aidata_example(tmp_path):
+def test_card_json_placeholder_is_echo_example(tmp_path):
     node = shutil.which("node")
     if not node:
         pytest.fail("需要本机 node 才能执行名片示例测试")
@@ -162,14 +162,13 @@ def test_card_json_placeholder_is_aidata_example(tmp_path):
     script = extracted + r"""
 const text = cardJsonPlaceholder();
 const card = JSON.parse(text);
-if (card.name !== "AI 数据智能体") throw new Error("name");
-if (card["x-sunny"].agent_id !== "your.org.aidata") throw new Error("agent_id");
-if (card["x-sunny"].agent_id === "aidata.hermes") throw new Error("must not reuse hermes id");
+if (card.name !== "实验室回声") throw new Error("name");
+if (card["x-sunny"].agent_id !== "your.org.echo") throw new Error("agent_id");
+if (card["x-sunny"].agent_id === "lab.echo") throw new Error("must not reuse sample id");
 const ids = card.skills.map(function (s) { return s.id; });
-if (JSON.stringify(ids) !== JSON.stringify(["collect.strategy.query", "collect.volume.query"])) {
+if (JSON.stringify(ids) !== JSON.stringify(["echo.ping"])) {
   throw new Error("skills " + JSON.stringify(ids));
 }
-if (text.indexOf("ai_collect") < 0) throw new Error("volume skill");
 console.log(JSON.stringify({ ok: true, skills: ids }));
 """
     path = tmp_path / "card_placeholder.js"
@@ -179,7 +178,7 @@ console.log(JSON.stringify({ ok: true, skills: ids }));
         pytest.fail(proc.stderr or proc.stdout or "node 名片示例测试失败")
     body = json.loads(proc.stdout)
     assert body["ok"] is True
-    assert body["skills"] == ["collect.strategy.query", "collect.volume.query"]
+    assert body["skills"] == ["echo.ping"]
 
 
 def test_publish_helpers_wired_into_pager():
@@ -233,9 +232,8 @@ def test_publish_markup_and_css_contract():
     assert "function cardJsonPlaceholder" in js
     assert "function applyCardJsonPlaceholder" in js
     assert "card-json-input" in js
-    assert "your.org.aidata" in js
-    assert "collect.strategy.query" in js
-    assert "collect.volume.query" in js
+    assert "your.org.echo" in js
+    assert "echo.ping" in js
     assert "JSON 无法解析" in js
     assert "请填写基址或 Card URL" in js
     assert ".publish-pager" in css

@@ -1296,12 +1296,12 @@
 
   function cardJsonPlaceholder() {
     return JSON.stringify({
-      name: "AI 数据智能体",
-      description: "对外只提供采集策略枚举查询与 ai_collect 余量查询；不开放模型调用、CVAT 建任务或现场 SQL。",
+      name: "实验室回声",
+      description: "把 query 原样回给调用方。不接业务系统，只示范跨进程发现与调用。",
       version: "0.1.0",
       supportedInterfaces: [
         {
-          url: "https://aidata.internal.example/sunny/v1",
+          url: "https://echo.internal.example/sunny/v1",
           protocolBinding: "HTTP+JSON",
           protocolVersion: "1.0",
         },
@@ -1311,64 +1311,29 @@
       defaultOutputModes: ["application/json"],
       skills: [
         {
-          id: "collect.strategy.query",
-          name: "采集策略查询",
-          description: "按 mission_name 或关键词查闭环采集策略枚举。检索域锁在策略表与 ai_collect 字典。",
-          tags: ["collect", "strategy", "readonly"],
-          examples: ["living_room 是什么采集策略"],
+          id: "echo.ping",
+          name: "回声",
+          description: "把 query 回给调用方。",
+          tags: ["echo", "readonly"],
+          examples: ["ping hello"],
           "x-sunny": {
             data_class: "internal",
             side_effects: "read",
             input_schema: {
               type: "object",
               additionalProperties: false,
-              anyOf: [{ required: ["query"] }, { required: ["mission_name"] }],
+              required: ["query"],
               properties: {
                 query: { type: "string" },
-                mission_name: { type: "string", description: "如 living_room" },
-                product_line: { type: "string", enum: ["deebot", "lawnmower"] },
                 trace_id: { type: "string" },
               },
             },
             output_schema: {
               type: "object",
-              required: ["ready", "mock", "items", "trace_id"],
+              required: ["ready", "query", "trace_id"],
               properties: {
                 ready: { type: "boolean" },
-                mock: { type: "boolean" },
-                items: { type: "array" },
-                trace_id: { type: "string" },
-              },
-            },
-          },
-        },
-        {
-          id: "collect.volume.query",
-          name: "采集数据量查询",
-          description: "按白名单槽查询 ai_collect 余量（count）。不返回预览图，不创建 CVAT 任务。",
-          tags: ["collect", "volume", "readonly"],
-          examples: ["living_room 在机型 0gxgac 还有多少图"],
-          "x-sunny": {
-            data_class: "internal",
-            side_effects: "read",
-            input_schema: {
-              type: "object",
-              additionalProperties: false,
-              anyOf: [{ required: ["mission_name"] }, { required: ["robotType"] }],
-              properties: {
-                mission_name: { type: "string" },
-                robotType: { type: "array", items: { type: "string" } },
-                quest_name: { type: "string" },
-                trace_id: { type: "string" },
-              },
-            },
-            output_schema: {
-              type: "object",
-              required: ["ready", "mock", "count", "trace_id"],
-              properties: {
-                ready: { type: "boolean" },
-                mock: { type: "boolean" },
-                count: { type: "integer" },
+                query: { type: "string" },
                 trace_id: { type: "string" },
               },
             },
@@ -1376,15 +1341,15 @@
         },
       ],
       "x-sunny": {
-        agent_id: "your.org.aidata",
-        workspace: "ecovacs.aidata",
+        agent_id: "your.org.echo",
+        workspace: "lab.demo",
         discovery: "registered_peers",
         access_tier: "S1",
         lifecycle: "draft",
         invoke_auth: "sunny_ticket",
         invoke_identity: "agent_service",
         scratch_access: "none",
-        not_exposed: ["model.invoke", "cvat.create_special_task", "hermes.chat"],
+        not_exposed: ["model.invoke"],
       },
     }, null, 2);
   }
@@ -1604,7 +1569,7 @@
           "<label for=\"pub-discovery\">对等可见</label>" +
           '<select id="pub-discovery">' + discoveryOptions(false) + "</select>" +
           "<label for=\"card-json\">智能体名片 JSON</label>" +
-          '<p class="hint">浅灰示例按 AI 数据智能体对外两技能写。改 <code>x-sunny.agent_id</code> 后再登记，不要直接用 <code>aidata.hermes</code>。</p>' +
+          '<p class="hint">浅灰示例是一张回声名片。改 <code>x-sunny.agent_id</code> 后再登记，不要直接用 <code>lab.echo</code>。</p>' +
           '<textarea id="card-json" class="card-json-input" spellcheck="false"></textarea>' +
           '<div class="actions" style="margin-top:14px">' +
             controlBtn("登记", { variant: "primary", type: "submit" }) +
@@ -1788,7 +1753,7 @@
         '<div class="pref-block"><h3>字号</h3>' + prefSeg(TYPE_SIZES, prefs.typeSize, "typeSize") + "</div>" +
         '<div class="pref-preview"><strong>智能体 · 名片</strong>' +
         '<p class="hint">交换名片之后才能对等沟通。</p>' +
-        '<code class="mono">lab.inspector · aidata.hermes</code></div>';
+        '<code class="mono">lab.inspector · lab.echo</code></div>';
     } else {
       body =
         "<h2>显示</h2>" +

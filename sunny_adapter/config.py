@@ -36,7 +36,8 @@ class AdapterSettings:
         self.revoke_poll_s = float(_env("SUNNY_ADAPTER_REVOKE_POLL_S", "0.25"))
         if self.revoke_poll_s < 0.05:
             self.revoke_poll_s = 0.05
-        self.aidata_root = Path(_env("AIDATA_ROOT", "/home/zhangshuang/PycharmProjects/AIDataAgent"))
+        aidata_raw = os.environ.get("AIDATA_ROOT", "").strip()
+        self.aidata_root = Path(aidata_raw) if aidata_raw else (ROOT / "data" / "no-external-wrapper")
         self.enrollment_source = _env("SUNNY_ADAPTER_ENROLLMENT", "self")
         mapping_default = default_mapping_path(ROOT, self.agent_id)
         mapping_raw = _env("SUNNY_ADAPTER_MAPPING", str(mapping_default) if mapping_default.is_file() else "")
