@@ -5,8 +5,10 @@
 | 窗口 | 约 5 个工作日，单开；建议排在 Well-Known 拉取之后 |
 | 学自 | mcp-gateway-registry 准入闸；Nacos 控制台人审 |
 | 上游 | [同类项目对照](../research/同类项目对照.md)；[policy.md](../specs/policy.md) |
-| 现状 | 已落地（2026-09-20）：`pending` / `approved` / `rejected` |
+| 现状 | 已落地（2026-09-20）：`none` / `pending` / `approved` / `rejected` |
 | 规格 | [`../specs/policy.md`](../specs/policy.md) |
+
+落地和上面的日程有这些不一样。D1 里的 `draft` 未采用：没走过审批的卡是 `none`，待审、通过、拒绝分别是 `pending`、`approved`、`rejected`。通过和拒绝写在 `store.py`：修订动作是 `approve` / `reject`，并各记一条 `card` 事件；`observe.py` 只把已有记录塑形成活动流。库字段在 `db.py`（`approval_status`、`approval_reason`、`approval_decided_at`、`approval_decided_by`），管理员权限是 `security.py` 的 `approve_agents`。Join Packet 已写入 [`docs/join.md`](../join.md)：名片写了 `discovery=approval_required` 时，上架须管理员通过，对等在通过前搜不到、出不了票。
 
 ## 目标
 
